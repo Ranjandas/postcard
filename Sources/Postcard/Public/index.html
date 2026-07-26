@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Postcard</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <h1>Postcard</h1>
+  <p class="subtitle">Drop short clips below to frame them as postcards.</p>
+</header>
+
+<section id="drop-zone" tabindex="0">
+  <p>Drag &amp; drop video clips here, or click to choose files</p>
+  <input type="file" id="file-input" accept="video/*" multiple hidden>
+</section>
+
+<section id="global-controls" hidden>
+  <div class="control-group">
+    <span class="control-label">Aspect ratio</span>
+    <div id="aspect-ratio-buttons" class="segmented">
+      <button type="button" class="ratio-btn" data-w="9" data-h="16">9:16<small>Story/Reel</small></button>
+      <button type="button" class="ratio-btn active" data-w="4" data-h="5">4:5<small>Portrait</small></button>
+      <button type="button" class="ratio-btn" data-w="1" data-h="1">1:1<small>Square</small></button>
+      <button type="button" class="ratio-btn" data-w="3" data-h="4">3:4<small>Tall</small></button>
+      <button type="button" class="ratio-btn" data-w="1.91" data-h="1">1.91:1<small>Landscape</small></button>
+    </div>
+  </div>
+  <div class="control-group sliders-row">
+    <label class="radius-control">
+      Corner roundedness
+      <input type="range" id="radius-slider" min="0" max="100" value="30">
+      <span id="radius-value">30%</span>
+    </label>
+    <label class="radius-control">
+      Side padding
+      <input type="range" id="padding-slider" min="0" max="40" value="0">
+      <span id="padding-value">0%</span>
+    </label>
+  </div>
+  <div class="actions">
+    <button id="export-all-btn">Export All</button>
+    <button id="reveal-btn">Reveal Output Folder</button>
+  </div>
+</section>
+
+<section id="clips"></section>
+
+<template id="clip-card-template">
+  <article class="clip-card">
+    <div class="canvas-preview">
+      <video muted playsinline preload="metadata"></video>
+    </div>
+    <div class="clip-info">
+      <div class="clip-name"></div>
+      <div class="clip-meta"></div>
+    </div>
+    <div class="trim-control">
+      <div class="trim-track">
+        <div class="trim-range"></div>
+      </div>
+      <input type="range" class="trim-start" min="0" max="1" step="0.01" value="0">
+      <input type="range" class="trim-end" min="0" max="1" step="0.01" value="1">
+      <div class="trim-labels">
+        <span class="trim-start-label">0:00.0</span>
+        <span class="trim-duration-label"></span>
+        <span class="trim-end-label">0:00.0</span>
+      </div>
+    </div>
+    <div class="clip-status">
+      <span class="status-text">Ready</span>
+      <button class="export-btn">Export</button>
+    </div>
+  </article>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>

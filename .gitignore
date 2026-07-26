@@ -1,0 +1,4 @@
+.build/
+Postcard.app/
+.swiftpm/
+.DS_Store
