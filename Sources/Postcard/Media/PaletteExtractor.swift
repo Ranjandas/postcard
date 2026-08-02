@@ -15,11 +15,24 @@ enum PaletteExtractor {
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 80, height: 80)
 
-        var buckets: [UInt32: (count: Int, r: Int, g: Int, b: Int)] = [:]
+        var images: [CGImage] = []
         for i in 0..<sampleCount {
             let time = CMTimeMultiplyByRatio(duration, multiplier: Int32(i + 1), divisor: Int32(sampleCount + 1))
-            guard let result = try? await generator.image(at: time) else { continue }
-            let cgImage = result.image
+            if let result = try? await generator.image(at: time) {
+                images.append(result.image)
+            }
+        }
+        return extractPalette(from: images, paletteSize: paletteSize)
+    }
+
+    /// Same bucket-and-select logic as the video path, over a single already-decoded frame.
+    static func extractPalette(from cgImage: CGImage, paletteSize: Int = 6) -> [String] {
+        extractPalette(from: [cgImage], paletteSize: paletteSize)
+    }
+
+    private static func extractPalette(from images: [CGImage], paletteSize: Int) -> [String] {
+        var buckets: [UInt32: (count: Int, r: Int, g: Int, b: Int)] = [:]
+        for cgImage in images {
             for (r, g, b) in pixelSamples(from: cgImage) {
                 // 8 levels per channel (round to nearest 32) keeps the bucket space small
                 // while still separating visually distinct colors.

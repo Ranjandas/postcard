@@ -460,7 +460,8 @@ button.secondary:hover:not(:disabled),
   cursor: pointer;
 }
 
-.canvas-preview video.main-video {
+.canvas-preview video.main-video,
+.canvas-preview img.main-img {
   position: relative;
   z-index: 1;
   max-width: 100%;
@@ -468,7 +469,8 @@ button.secondary:hover:not(:disabled),
   display: block;
 }
 
-.bg-blur-video {
+.bg-blur-video,
+.bg-blur-img {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -480,8 +482,27 @@ button.secondary:hover:not(:disabled),
   display: none;
 }
 
-.canvas-preview.bg-is-blur .bg-blur-video {
+.canvas-preview.bg-is-blur .bg-blur-video,
+.canvas-preview.bg-is-blur .bg-blur-img {
   display: block;
+}
+
+/* --- Photo vs video card variants --------------------------------------- */
+/* Photo editing (crop, tonal adjustments, background) all happens in the larger #photo-editor
+   view — the grid card is a thumbnail: click it (or the edit icon) to open the editor. */
+
+.clip-card.is-video .main-img,
+.clip-card.is-video .bg-blur-img,
+.clip-card.is-video .edit-overlay {
+  display: none;
+}
+
+.clip-card.is-photo .main-video,
+.clip-card.is-photo .bg-blur-video,
+.clip-card.is-photo .play-overlay,
+.clip-card.is-photo .trim-control,
+.clip-card.is-photo .background-control {
+  display: none;
 }
 
 .play-overlay {
@@ -512,6 +533,40 @@ button.secondary:hover:not(:disabled),
 .play-overlay svg {
   width: 22px;
   height: 22px;
+}
+
+.edit-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 2;
+}
+
+.canvas-preview:hover .edit-overlay {
+  opacity: 0.85;
+}
+
+.edit-overlay:hover {
+  opacity: 1 !important;
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.edit-overlay .icon {
+  width: 18px;
+  height: 18px;
 }
 
 .play-overlay .icon-pause {
@@ -663,6 +718,241 @@ button.secondary:hover:not(:disabled),
 .bg-blur-btn.active {
   background: var(--accent);
   color: white;
+}
+
+/* --- Adjustments control (editor sidebar) --------------------------------- */
+
+.adjustments-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.adjust-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.adjust-label {
+  min-width: 5.4rem;
+  flex-shrink: 0;
+}
+
+.adjust-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.adjust-value {
+  min-width: 2.4ch;
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+/* --- Photo editor (large view) -------------------------------------------- */
+
+.photo-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.photo-editor[hidden] {
+  display: none;
+}
+
+.editor-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.editor-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.editor-preview-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem;
+}
+
+.editor-canvas-preview {
+  height: min(78vh, 900px);
+  width: auto;
+  max-width: 100%;
+  cursor: default;
+}
+
+.editor-crop-wrapper {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  display: block;
+}
+
+.editor-crop-wrapper img.editor-main-img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  max-height: none;
+}
+
+.editor-close-btn {
+  position: absolute;
+  top: 1.25rem;
+  left: 1.25rem;
+  z-index: 3;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(120, 120, 128, 0.32);
+  color: #fff;
+  box-shadow: none;
+}
+
+.editor-close-btn:hover:not(:disabled) {
+  background: rgba(120, 120, 128, 0.46);
+  filter: none;
+}
+
+.editor-close-btn .icon {
+  width: 17px;
+  height: 17px;
+}
+
+.tone-curve-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* --- Crop stage ------------------------------------------------------------ */
+
+.crop-stage {
+  position: absolute;
+  inset: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.crop-stage[hidden] {
+  display: none;
+}
+
+.crop-stage-img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.crop-rect {
+  position: absolute;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  cursor: move;
+  touch-action: none;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+  touch-action: none;
+}
+
+.crop-handle[data-edge="nw"] { top: -7px; left: -7px; cursor: nwse-resize; }
+.crop-handle[data-edge="n"]  { top: -7px; left: 50%; margin-left: -7px; cursor: ns-resize; }
+.crop-handle[data-edge="ne"] { top: -7px; right: -7px; cursor: nesw-resize; }
+.crop-handle[data-edge="e"]  { top: 50%; right: -7px; margin-top: -7px; cursor: ew-resize; }
+.crop-handle[data-edge="se"] { bottom: -7px; right: -7px; cursor: nwse-resize; }
+.crop-handle[data-edge="s"]  { bottom: -7px; left: 50%; margin-left: -7px; cursor: ns-resize; }
+.crop-handle[data-edge="sw"] { bottom: -7px; left: -7px; cursor: nesw-resize; }
+.crop-handle[data-edge="w"]  { top: 50%; left: -7px; margin-top: -7px; cursor: ew-resize; }
+
+/* --- Editor sidebar --------------------------------------------------------- */
+
+.editor-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  background: var(--card-bg);
+  border-left: 1px solid var(--card-border);
+  padding: 1.5rem 1.3rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.3rem;
+}
+
+.editor-clip-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-sidebar .control-group {
+  gap: 0.6rem;
+}
+
+.crop-tool-btn.active {
+  background: var(--accent);
+  color: white;
+}
+
+.editor-background-control {
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--separator);
+}
+
+.editor-adjustments-control {
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--separator);
+}
+
+.editor-actions {
+  margin-top: auto;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--separator);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.editor-actions .editor-export-btn {
+  flex-shrink: 0;
+}
+
+.editor-status-text {
+  flex: 1;
 }
 
 /* --- Trim control ---------------------------------------------------------- */

@@ -33,9 +33,9 @@
       <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path>
     </svg>
   </div>
-  <p class="drop-title">Drag &amp; drop video clips here</p>
+  <p class="drop-title">Drag &amp; drop video clips or photos here</p>
   <p class="drop-hint">or click to choose files</p>
-  <input type="file" id="file-input" accept="video/*" multiple hidden>
+  <input type="file" id="file-input" accept="video/*,image/*" multiple hidden>
 </section>
 
 <section id="global-controls" hidden>
@@ -82,10 +82,18 @@
   <article class="clip-card">
     <div class="canvas-preview">
       <video class="bg-blur-video" muted playsinline preload="metadata"></video>
+      <img class="bg-blur-img" alt="">
       <video class="main-video" playsinline preload="metadata"></video>
+      <img class="main-img" alt="">
       <button type="button" class="play-overlay" aria-label="Play">
         <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
         <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"></path></svg>
+      </button>
+      <button type="button" class="edit-overlay" aria-label="Edit photo">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"></path>
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+        </svg>
       </button>
     </div>
     <div class="clip-info">
@@ -133,6 +141,114 @@
     </div>
   </article>
 </template>
+
+<div id="photo-editor" class="photo-editor" hidden>
+  <div class="editor-backdrop"></div>
+  <div class="editor-panel">
+    <div class="editor-preview-area">
+      <button type="button" class="editor-close-btn" aria-label="Close editor">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"></path>
+          <path d="M6 6l12 12"></path>
+        </svg>
+      </button>
+
+      <div class="editor-canvas-preview canvas-preview">
+        <img class="editor-bg-blur-img" alt="">
+        <div class="editor-crop-wrapper">
+          <img class="editor-main-img" alt="">
+        </div>
+      </div>
+
+      <div class="crop-stage" hidden>
+        <img class="crop-stage-img" alt="">
+        <div class="crop-rect">
+          <div class="crop-handle" data-edge="nw"></div>
+          <div class="crop-handle" data-edge="n"></div>
+          <div class="crop-handle" data-edge="ne"></div>
+          <div class="crop-handle" data-edge="e"></div>
+          <div class="crop-handle" data-edge="se"></div>
+          <div class="crop-handle" data-edge="s"></div>
+          <div class="crop-handle" data-edge="sw"></div>
+          <div class="crop-handle" data-edge="w"></div>
+        </div>
+      </div>
+
+      <svg class="tone-curve-defs" width="0" height="0" aria-hidden="true">
+        <filter id="editor-tone-curve" color-interpolation-filters="sRGB">
+          <feComponentTransfer>
+            <feFuncR type="table" tableValues="0 1"></feFuncR>
+            <feFuncG type="table" tableValues="0 1"></feFuncG>
+            <feFuncB type="table" tableValues="0 1"></feFuncB>
+          </feComponentTransfer>
+        </filter>
+      </svg>
+    </div>
+
+    <div class="editor-sidebar">
+      <div class="editor-clip-name"></div>
+
+      <div class="control-group">
+        <button type="button" class="crop-tool-btn secondary">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"></path><path d="M18 22V8a2 2 0 0 0-2-2H2"></path></svg>
+          <span>Crop</span>
+        </button>
+        <button type="button" class="crop-reset-btn secondary" hidden>Reset</button>
+        <button type="button" class="crop-done-btn" hidden>Done</button>
+      </div>
+
+      <div class="background-control editor-background-control">
+        <span class="control-label-sm">Background</span>
+        <div class="bg-swatches"></div>
+        <label class="bg-custom-swatch" title="Custom color">
+          <input type="color" class="bg-color-input" value="#ffffff">
+        </label>
+        <button type="button" class="bg-blur-btn" title="Fill the background with a blurred copy of the photo">Blur</button>
+      </div>
+
+      <div class="adjustments-control editor-adjustments-control">
+        <label class="adjust-row">
+          <span class="adjust-label">Exposure</span>
+          <input type="range" class="slider adjust-exposure" min="-100" max="100" value="0">
+          <span class="adjust-value exposure-value">0</span>
+        </label>
+        <label class="adjust-row">
+          <span class="adjust-label">Highlights</span>
+          <input type="range" class="slider adjust-highlights" min="-100" max="100" value="0">
+          <span class="adjust-value highlights-value">0</span>
+        </label>
+        <label class="adjust-row">
+          <span class="adjust-label">Shadows</span>
+          <input type="range" class="slider adjust-shadows" min="-100" max="100" value="0">
+          <span class="adjust-value shadows-value">0</span>
+        </label>
+        <label class="adjust-row">
+          <span class="adjust-label">Brightness</span>
+          <input type="range" class="slider adjust-brightness" min="-100" max="100" value="0">
+          <span class="adjust-value brightness-value">0</span>
+        </label>
+        <label class="adjust-row">
+          <span class="adjust-label">Contrast</span>
+          <input type="range" class="slider adjust-contrast" min="-100" max="100" value="0">
+          <span class="adjust-value contrast-value">0</span>
+        </label>
+        <label class="adjust-row">
+          <span class="adjust-label">Black Point</span>
+          <input type="range" class="slider adjust-blackpoint" min="-100" max="100" value="0">
+          <span class="adjust-value blackpoint-value">0</span>
+        </label>
+      </div>
+
+      <div class="editor-actions">
+        <button class="editor-export-btn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="M7.5 11L12 15.5 16.5 11"></path><path d="M4 18h16"></path></svg>
+          <span>Export</span>
+        </button>
+        <span class="editor-status-text status-text"></span>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="/app.js"></script>
 </body>

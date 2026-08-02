@@ -5,10 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Postcard is a macOS menu bar app. It runs a local Vapor web server in-process and serves a
-browser UI at `http://127.0.0.1:8420`. You drag short video clips onto the page, trim them, pick
-an aspect ratio and corner roundedness/padding, and it exports each clip — centered on a white
-canvas, scaled to fit, corners rounded — using hardware-accelerated AVFoundation/VideoToolbox
-encoding. Output goes to `~/Movies/Postcard Output/`.
+browser UI at `http://127.0.0.1:8420`. You drag short video clips or photos onto the page.
+Video clips get trimmed; photos get cropped and tonally adjusted (exposure, highlights, shadows,
+brightness, contrast, black point) in a large Lightroom/Photomator-style editor. Both share the
+same "postcard" framing controls — aspect ratio, corner roundedness, padding, background (white/
+custom color/blurred) — and export centered on the canvas, scaled to fit, corners rounded, using
+hardware-accelerated AVFoundation/VideoToolbox encoding for video and Core Image for photos.
+Output goes to `~/Movies/Postcard Output/`.
 
 ## Environment constraint (important)
 
@@ -55,28 +58,39 @@ awaiting shutdown.
 ### Request flow
 
 `Server/Configure.swift` wires: `FileMiddleware` serving `Public/` (dev via `swift run` and
-packaged `.app` both resolve it through `Bundle.module`), then four JSON/binary routes:
+packaged `.app` both resolve it through `Bundle.module`), then five JSON/binary routes:
 
-- `POST /api/upload` (`UploadController`) — takes the raw video bytes as the request body (not
+- `POST /api/upload` (`UploadController`) — takes the raw media bytes as the request body (not
   `multipart/form-data`), with the filename percent-encoded in an `X-Filename` header, then saves
-  it to a per-clip temp dir, probes duration/dimensions with `AVURLAsset`'s async `load(...)` API,
-  registers the clip in `ClipStore`. Deliberately *not* multipart: multipart-kit's `MultipartParser`
-  restarts its chunk scan at every byte matching the boundary's leading byte (`\r`), which occurs
-  roughly every 256 bytes in binary video data, so an 80-90MB clip turned into ~300K tiny
-  `onBody`/`writeBuffer` callbacks and a ~30s upload even over localhost — confirmed by timing-
-  instrumenting each step (`decode` alone was ~29s of a ~31s upload; disk write, AVFoundation
-  probing, and palette extraction combined were ~0.1s). Sending the file as a raw body instead
-  drops the same 95MB upload to ~1.2s.
+  it to a per-clip temp dir. Classifies by `UTType(filenameExtension:).conforms(to: .image)` and
+  branches: video probes duration/dimensions with `AVURLAsset`'s async `load(...)` API (throws if
+  no video track); photo reads dimensions via `CGImageSourceCopyPropertiesAtIndex` (metadata-only,
+  no full decode), correcting for EXIF orientations 5-8 which swap width/height. Both branches
+  register the clip in `ClipStore` and extract a suggested color palette. Deliberately *not*
+  multipart: multipart-kit's `MultipartParser` restarts its chunk scan at every byte matching the
+  boundary's leading byte (`\r`), which occurs roughly every 256 bytes in binary video data, so an
+  80-90MB clip turned into ~300K tiny `onBody`/`writeBuffer` callbacks and a ~30s upload even over
+  localhost — confirmed by timing-instrumenting each step (`decode` alone was ~29s of a ~31s
+  upload; disk write, AVFoundation probing, and palette extraction combined were ~0.1s). Sending
+  the file as a raw body instead drops the same 95MB upload to ~1.2s.
 - `GET /api/media/:id` (`MediaController`) — `req.fileio.asyncStreamFile(at:)`, which handles
-  HTTP Range requests, needed for `<video>` scrubbing in the browser.
-- `POST /api/export/:id` (`ExportController`) — decodes trim range, corner radius %, aspect
-  ratio, padding % from the request body, clamps them, and calls `VideoProcessor.export`.
+  HTTP Range requests, needed for `<video>` scrubbing in the browser (and works unchanged for
+  photo byte-streaming).
+- `POST /api/export/:id` (`ExportController`) — decodes corner radius %, aspect ratio, padding %,
+  and background from the request body (shared by both media kinds), clamps them, then switches
+  on `clip.kind`: video also decodes trim range and calls `VideoProcessor.export`; photo also
+  decodes crop rect + the six tonal adjustment percentages and calls `PhotoProcessor.export`.
+- `DELETE /api/clip/:id` (`ClipController`) — removes the clip from `ClipStore` and deletes its
+  temp dir; kind-agnostic.
 - `POST /api/reveal-output` (`RevealController`) — hops to `@MainActor` to call
   `NSWorkspace.activateFileViewerSelecting`.
 
 `ClipStore` (`Media/ClipStore.swift`) is an `actor` holding only `Sendable` value types (`URL`,
-`CMTime`, `CGSize`, `String`) — never raw `AVAssetTrack`/`AVMutableComposition` — specifically to
-avoid Swift 6 strict-concurrency friction with AVFoundation's non-`Sendable` types.
+`CGSize`, `String`, and a `MediaKind` enum — `.video(duration: CMTime)` or `.photo`) — never raw
+`AVAssetTrack`/`AVMutableComposition`/`CIImage`, specifically to avoid Swift 6 strict-concurrency
+friction with AVFoundation/CoreImage's non-`Sendable` types. `MediaKind` is an enum rather than
+optional fields on `Clip` deliberately — it keeps every consumer's `switch` exhaustive instead of
+relying on an unenforced "duration is nil iff photo" invariant.
 
 ### Video processing pipeline (`Media/VideoProcessor.swift`)
 
@@ -116,16 +130,94 @@ Core Animation behaviors were discovered empirically (frame-by-frame visual insp
   assumed) by checking `com.apple.coremedia.videoencoder` XPC activity during export via
   `log show`.
 
+### Photo processing pipeline (`Media/PhotoProcessor.swift`)
+
+The still-image counterpart to `VideoProcessor`. A photo is a single frame, so this needs none of
+`AVVideoCompositing`'s per-frame plumbing — decode once with `CIImage(contentsOf:options:
+[.applyOrientationProperty: true])`, crop, apply the tonal adjustment filter chain, composite onto
+the canvas, one `CIContext.render` call, encode to JPEG via `CGImageDestination`. It reuses
+`VideoProcessor.swift`'s geometry math (`fittedRect`/`coveringRect`/`canvasSize`/`cornerRadius`)
+unchanged, and reuses the exact Core Image compositing pattern already proven out by
+`BlurredBackgroundCompositor` for the video blur-background option: a `CIRoundedRectangleGenerator`
+mask blended with `CIBlendWithMask` for corner rounding (not a painted-over shape — same
+anti-aliasing rationale as the video path's `CALayer.mask`), and a clamp→`CIGaussianBlur`→crop
+sequence for the blurred background fill.
+
+- **Crop** is stored/sent as fractions (0...1) of the oriented photo, top-left origin, y-down —
+  the same convention as CSS/DOM coordinates, matching what the browser's crop tool naturally
+  works in. Converting to a Core Image pixel rect requires a y-flip (`cropYPx = (1 - y - height) *
+  imageHeight`), since `CIImage.extent` is bottom-left/y-up. Like the video path's
+  `preferredTransform` normalization, `.cropped(to:)` leaves the extent at the crop rect's own
+  (non-zero) origin, which would throw off every transform applied afterward (they're relative to
+  the coordinate space's origin, not the content's own bounds) — it must be translated back to
+  `(0,0)` before the fit/scale/position transforms run.
+- **Tonal adjustments** — exposure, highlights, shadows, brightness, contrast, black point — map
+  onto `CIExposureAdjust`, `CIHighlightShadowAdjust`, `CIColorControls`, and (for black point,
+  which has no dedicated CI filter) a `CIColorMatrix` levels remap. The exact parameter names,
+  defaults, and — critically — hard min/max bounds were pulled from `CIFilter(name:)!.attributes`
+  at a REPL/throwaway-script prompt rather than assumed from docs (e.g. `inputHighlightAmount` is
+  hard-capped at 1 — the filter can only recover/darken highlights, never boost them past
+  "unchanged," which shapes how the UI slider's positive half behaves). **The sign of the
+  highlights mapping was wrong in an early version** (`1 - percent/100` instead of `1 +
+  percent/100`) and behaved plausibly enough in code review to ship — it was only caught by
+  rendering actual before/after pixels for a known dark/bright test patch and comparing values,
+  not by reading the filter's parameter description. `CIHighlightShadowAdjust` is also a *local*
+  tone-mapping operator (its `inputRadius` parameter controls the local neighborhood used to
+  decide what's a shadow/highlight) — testing it against a flat color or a smooth gradient shows
+  almost no effect regardless of amount, because there's no local contrast for it to act on; a
+  test image needs actual dark/light patches or real photo texture to be informative. Both
+  lessons generalize: when validating a `CIFilter`, render real pixels and compare numbers, don't
+  reason from the parameter's description alone.
+
+### Photo editor UI (`Public/app.js`, the `#photo-editor` overlay in `index.html`)
+
+Photo editing (crop + the six tonal sliders + background) happens in a single, large, reusable
+overlay — Lightroom/Photomator-style — rather than inline on each grid card (grid cards stay
+simple thumbnails; click one, or its edit icon, to open the editor). There's exactly **one**
+editor instance in the DOM, reused for whichever photo is currently open: its control listeners
+are wired once and read/write a module-level `currentEditingClip` reference rather than closing
+over a specific clip at setup time, which avoids rebinding (and leaking duplicate) listeners each
+time a different photo is opened — `renderEditor*`/`applyEditor*` functions repopulate the static
+UI for a given clip on open.
+
+- **Cropped preview via CSS, not canvas pixels**: the editor's large "framed" preview (and the
+  crop tool's own live rect) render the crop purely with CSS — an `overflow: hidden` wrapper sized
+  to the crop region's own aspect ratio (via `aspect-ratio`, so it fits into the canvas box exactly
+  like an uncropped `<img>` did before), containing the full `<img>` absolutely positioned/scaled
+  so the crop region fills the wrapper (`width/height` scaled by `naturalSize / cropSize`,
+  `left/top` offset by `-cropOrigin / cropSize`). This is the same "let CSS layout do the
+  contain-fit math" approach the rest of the frontend/backend geometry contract already relies on
+  (see below) — no canvas/pixel manipulation needed for a live-draggable crop preview.
+- **Crop tool** (draggable rect + 8 handles over the full, uncropped photo) tracks the crop rect
+  in fraction-space (0...1) and computes drag deltas relative to the *rendered* image box
+  (`getBoundingClientRect()` diffed against the stage container, recomputed per drag since the
+  image is itself contain-fit and may be letterboxed within its stage). Each handle's `data-edge`
+  (`"nw"`, `"n"`, `"e"`, …) is checked with `.includes('w'|'e'|'n'|'s')` so one drag handler covers
+  all 8 handles plus whole-rect move, rather than 9 separate cases.
+- **Live tonal preview via an SVG filter, not CSS `filter` functions**: exposure/brightness/
+  contrast have clean CSS equivalents, but highlights/shadows/black point don't (CSS's `filter`
+  shorthand has no tone-curve/levels primitive). Instead, a single 1D lookup curve (33 points
+  across input 0...1, each slider's contribution weighted by where it sits in that range — shadows
+  weighted toward 0, highlights toward 1, black point a floor shift) is computed in JS and applied
+  via an `<feComponentTransfer><feFuncR type="table" ...>` SVG filter referenced from the image's
+  `style.filter = "url(#editor-tone-curve)"`. Only the filter's `tableValues` attributes are
+  rewritten per slider input — the `url(#...)` reference itself never changes, so the browser just
+  re-renders with the new curve. Like the rest of the preview stack, this is a deliberate
+  approximation (documented in the JS), not a client-side reimplementation of
+  `CIHighlightShadowAdjust`'s actual algorithm — the export is the source of truth.
+
 ### Frontend/backend geometry contract
 
 Corner radius, aspect ratio, and padding are **global** controls (one value applies to every clip
-in a batch), while trim start/end are per-clip. The percent-based math is intentionally kept
-consistent between the browser preview and the server:
+in a batch, video or photo), while trim start/end and crop are per-clip (trim is video-only, crop
+is photo-only). The percent-based math is intentionally kept consistent between the browser
+preview and the server:
 
 - Corner radius %: `radius = (shortSideOfFittedVideoRect / 2) * (percent / 100)` — 100% rounds the
   video's short edge into a full pill/circle. Implemented once server-side
-  (`cornerRadius(forPercent:ofRect:)`) and once client-side (`applyRadiusToVideo` in `app.js`,
-  reading the video element's post-layout `clientWidth`/`clientHeight`).
+  (`cornerRadius(forPercent:ofRect:)`) and once client-side (`applyRadiusToPreviewElement` in
+  `app.js`, reading the relevant element's post-layout `clientWidth`/`clientHeight` — a `<video>`,
+  an `<img>`, or, in the photo editor, the crop-wrapper div).
 - Padding %: expressed as "% of canvas width per side." The browser preview applies this as CSS
   `padding-left`/`padding-right` percentages on `.canvas-preview`, which CSS defines as relative
   to the container's *width* even for what would otherwise be vertical padding — this happens to

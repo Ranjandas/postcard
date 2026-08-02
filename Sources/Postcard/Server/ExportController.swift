@@ -10,11 +10,6 @@ enum ExportController {
             throw Abort(.notFound)
         }
 
-        let start = max(0, body.trimStart)
-        let end = min(clip.duration.seconds, body.trimEnd)
-        guard start < end else {
-            throw Abort(.badRequest, reason: "Invalid trim range")
-        }
         let radius = min(max(body.cornerRadiusPercent, 0), 100)
         let padding = min(max(body.paddingPercent, 0), 40)
         let ratioWidth = max(body.aspectRatioWidth, 0.01)
@@ -23,22 +18,48 @@ enum ExportController {
         let background: BackgroundMode = body.backgroundMode == "blur"
             ? .blur
             : .color(red: colorComponents.red, green: colorComponents.green, blue: colorComponents.blue)
-
+        let canvas = canvasSize(ratioWidth: ratioWidth, ratioHeight: ratioHeight)
         let outDir = try OutputLocation.ensureOutputDirectory()
-        let outURL = OutputLocation.uniqueOutputURL(in: outDir, baseName: clip.originalFilename)
 
-        try await VideoProcessor.export(.init(
-            sourceURL: clip.sourceURL,
-            outputURL: outURL,
-            trimStart: CMTime(seconds: start, preferredTimescale: 600),
-            trimEnd: CMTime(seconds: end, preferredTimescale: 600),
-            cornerRadiusPercent: radius,
-            canvasSize: canvasSize(ratioWidth: ratioWidth, ratioHeight: ratioHeight),
-            horizontalPaddingPercent: padding,
-            background: background
-        ))
+        switch clip.kind {
+        case .video(let duration):
+            let start = max(0, body.trimStart)
+            let end = min(duration.seconds, body.trimEnd)
+            guard start < end else {
+                throw Abort(.badRequest, reason: "Invalid trim range")
+            }
+            let outURL = OutputLocation.uniqueOutputURL(in: outDir, baseName: clip.originalFilename, extension: "mp4")
+            try await VideoProcessor.export(.init(
+                sourceURL: clip.sourceURL,
+                outputURL: outURL,
+                trimStart: CMTime(seconds: start, preferredTimescale: 600),
+                trimEnd: CMTime(seconds: end, preferredTimescale: 600),
+                cornerRadiusPercent: radius,
+                canvasSize: canvas,
+                horizontalPaddingPercent: padding,
+                background: background
+            ))
+            return ExportResponse(id: id, outputPath: outURL.path)
 
-        return ExportResponse(id: id, outputPath: outURL.path)
+        case .photo:
+            let outURL = OutputLocation.uniqueOutputURL(in: outDir, baseName: clip.originalFilename, extension: "jpg")
+            try PhotoProcessor.export(.init(
+                sourceURL: clip.sourceURL,
+                outputURL: outURL,
+                cornerRadiusPercent: radius,
+                canvasSize: canvas,
+                horizontalPaddingPercent: padding,
+                background: background,
+                crop: CropRect(x: body.cropX, y: body.cropY, width: body.cropWidth, height: body.cropHeight),
+                exposurePercent: body.exposurePercent,
+                highlightsPercent: body.highlightsPercent,
+                shadowsPercent: body.shadowsPercent,
+                brightnessPercent: body.brightnessPercent,
+                contrastPercent: body.contrastPercent,
+                blackPercent: body.blackPercent
+            ))
+            return ExportResponse(id: id, outputPath: outURL.path)
+        }
     }
 
     /// Parses a `#rrggbb` (or `rrggbb`) string into 0...1 components, falling back to white for

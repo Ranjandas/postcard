@@ -5,12 +5,17 @@ import Foundation
 actor ClipStore {
     static let shared = ClipStore()
 
+    enum MediaKind: Sendable {
+        case video(duration: CMTime)
+        case photo
+    }
+
     struct Clip: Sendable {
         let id: String
         let originalFilename: String
         let sourceURL: URL
-        let duration: CMTime
         let orientedSize: CGSize
+        let kind: MediaKind
     }
 
     private var clips: [String: Clip] = [:]
