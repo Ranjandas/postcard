@@ -8,12 +8,33 @@
 </head>
 <body>
 <header>
-  <h1>Postcard</h1>
-  <p class="subtitle">Drop short clips below to frame them as postcards.</p>
+  <div class="header-inner">
+    <div class="app-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+        <circle cx="8.5" cy="10.5" r="1.5"></circle>
+        <path d="M21 15.5l-5-4.5-4.5 4-2.5-2-6 5.5"></path>
+      </svg>
+    </div>
+    <div class="header-text">
+      <h1>Postcard</h1>
+      <p class="subtitle">Drop short clips below to frame them as postcards.</p>
+    </div>
+  </div>
 </header>
 
+<main>
+
 <section id="drop-zone" tabindex="0">
-  <p>Drag &amp; drop video clips here, or click to choose files</p>
+  <div class="drop-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 16V4"></path>
+      <path d="M7 9l5-5 5 5"></path>
+      <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path>
+    </svg>
+  </div>
+  <p class="drop-title">Drag &amp; drop video clips here</p>
+  <p class="drop-hint">or click to choose files</p>
   <input type="file" id="file-input" accept="video/*" multiple hidden>
 </section>
 
@@ -21,6 +42,7 @@
   <div class="control-group">
     <span class="control-label">Aspect ratio</span>
     <div id="aspect-ratio-buttons" class="segmented">
+      <div class="segmented-indicator"></div>
       <button type="button" class="ratio-btn" data-w="9" data-h="16">9:16<small>Story/Reel</small></button>
       <button type="button" class="ratio-btn active" data-w="4" data-h="5">4:5<small>Portrait</small></button>
       <button type="button" class="ratio-btn" data-w="1" data-h="1">1:1<small>Square</small></button>
@@ -31,27 +53,39 @@
   <div class="control-group sliders-row">
     <label class="radius-control">
       Corner roundedness
-      <input type="range" id="radius-slider" min="0" max="100" value="30">
+      <input type="range" class="slider" id="radius-slider" min="0" max="100" value="30">
       <span id="radius-value">30%</span>
     </label>
     <label class="radius-control">
       Side padding
-      <input type="range" id="padding-slider" min="0" max="40" value="0">
+      <input type="range" class="slider" id="padding-slider" min="0" max="40" value="0">
       <span id="padding-value">0%</span>
     </label>
   </div>
   <div class="actions">
-    <button id="export-all-btn">Export All</button>
-    <button id="reveal-btn">Reveal Output Folder</button>
+    <button id="export-all-btn">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L4 14h6l-1 7 9-11h-6l1-7z"></path></svg>
+      <span>Export All</span>
+    </button>
+    <button id="reveal-btn" class="secondary">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"></path></svg>
+      <span>Reveal Output Folder</span>
+    </button>
   </div>
 </section>
 
 <section id="clips"></section>
 
+</main>
+
 <template id="clip-card-template">
   <article class="clip-card">
     <div class="canvas-preview">
-      <video muted playsinline preload="metadata"></video>
+      <video playsinline preload="metadata"></video>
+      <button type="button" class="play-overlay" aria-label="Play">
+        <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"></path></svg>
+      </button>
     </div>
     <div class="clip-info">
       <div class="clip-name"></div>
@@ -60,6 +94,7 @@
     <div class="trim-control">
       <div class="trim-track">
         <div class="trim-range"></div>
+        <div class="trim-playhead"></div>
       </div>
       <input type="range" class="trim-start" min="0" max="1" step="0.01" value="0">
       <input type="range" class="trim-end" min="0" max="1" step="0.01" value="1">
@@ -71,7 +106,10 @@
     </div>
     <div class="clip-status">
       <span class="status-text">Ready</span>
-      <button class="export-btn">Export</button>
+      <button class="export-btn">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="M7.5 11L12 15.5 16.5 11"></path><path d="M4 18h16"></path></svg>
+        <span>Export</span>
+      </button>
     </div>
   </article>
 </template>

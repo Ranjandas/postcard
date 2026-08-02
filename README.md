@@ -7,7 +7,9 @@ processing, right from your menu bar.
 ## Features
 
 - **Drag-and-drop batch import** — drop multiple clips at once, each gets its own trim range.
-- **Trim** — set in/out points per clip with a scrubbable dual-handle slider.
+- **Trim** — set in/out points per clip with a scrubbable dual-handle slider, or click the
+  preview to play (looping within the current trim range) and press `i`/`o` to set the in/out
+  points live.
 - **Aspect ratio** — pick from Instagram's supported ratios: `9:16` (Story/Reel), `4:5`
   (Portrait), `1:1` (Square), `3:4` (Tall), `1.91:1` (Landscape).
 - **Rounded corners** — adjustable roundedness, from square to a full pill shape.
@@ -49,7 +51,9 @@ won't block it on the machine that built it).
 
 1. Launch Postcard — it starts a local server and opens the UI in your browser.
 2. Drag one or more video clips onto the drop zone (or click it to choose files).
-3. For each clip, drag the trim handles to set the start/end points.
+3. For each clip, drag the trim handles to set the start/end points — or click the preview to
+   play it (it loops within the current trim range) and press `i`/`o` while it's playing to set
+   the in/out points at the current playback position.
 4. Use the global controls to pick an aspect ratio, corner roundedness, and side padding — these
    apply to every clip in the batch and update all the thumbnails live.
 5. Click **Export** on a clip, or **Export All** for the whole batch.
