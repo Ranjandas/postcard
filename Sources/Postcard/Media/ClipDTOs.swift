@@ -1,9 +1,5 @@
 import Vapor
 
-struct UploadForm: Content {
-    var file: File
-}
-
 struct UploadResponse: Content {
     let id: String
     let filename: String

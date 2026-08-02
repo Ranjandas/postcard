@@ -3,17 +3,31 @@ import AVFoundation
 import Foundation
 
 enum UploadController {
+    /// Uploads are sent as a raw binary body (not `multipart/form-data`) with the filename in the
+    /// `X-Filename` header, percent-encoded. multipart-kit's `MultipartParser` splits the body
+    /// into a new chunk (and callback) at every byte matching the boundary's leading byte (`\r`),
+    /// which occurs roughly every 256 bytes in binary video data — turning a single-digit-MB/s
+    /// operation into hundreds of thousands of tiny buffer-copy callbacks and multi-second
+    /// uploads even on localhost, confirmed empirically via timing instrumentation (~30s of a
+    /// ~31s upload spent solely in `req.content.decode`). Reading the raw collected body instead
+    /// skips that parser entirely.
     static func upload(_ req: Request) async throws -> UploadResponse {
-        let form = try req.content.decode(UploadForm.self)
+        guard let encodedFilename = req.headers.first(name: "X-Filename"),
+              let filename = encodedFilename.removingPercentEncoding else {
+            throw Abort(.badRequest, reason: "Missing X-Filename header")
+        }
+        guard var buffer = req.body.data else {
+            throw Abort(.badRequest, reason: "Missing request body")
+        }
         let id = UUID().uuidString
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("Postcard", isDirectory: true)
             .appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        let ext = URL(fileURLWithPath: form.file.filename).pathExtension
+        let ext = URL(fileURLWithPath: filename).pathExtension
         let destURL = dir.appendingPathComponent("source.\(ext.isEmpty ? "mov" : ext)")
-        let data = Data(buffer: form.file.data)
+        let data = buffer.readData(length: buffer.readableBytes) ?? Data()
         try data.write(to: destURL)
 
         let asset = AVURLAsset(url: destURL)
@@ -30,7 +44,7 @@ enum UploadController {
 
         await ClipStore.shared.register(.init(
             id: id,
-            originalFilename: form.file.filename,
+            originalFilename: filename,
             sourceURL: destURL,
             duration: duration,
             orientedSize: orientedSize
@@ -38,7 +52,7 @@ enum UploadController {
 
         return UploadResponse(
             id: id,
-            filename: form.file.filename,
+            filename: filename,
             durationSeconds: duration.seconds,
             width: Int(orientedSize.width),
             height: Int(orientedSize.height),

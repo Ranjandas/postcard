@@ -163,9 +163,11 @@
     const statusText = cardEl.querySelector('.status-text');
     statusText.textContent = 'Uploading…';
     try {
-      const formData = new FormData();
-      formData.append('file', file, file.name);
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'X-Filename': encodeURIComponent(file.name) },
+        body: file,
+      });
       if (!res.ok) throw new Error(`upload failed (${res.status})`);
       const data = await res.json();
       initializeClip(cardEl, data);

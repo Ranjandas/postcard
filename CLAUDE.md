@@ -55,11 +55,18 @@ awaiting shutdown.
 ### Request flow
 
 `Server/Configure.swift` wires: `FileMiddleware` serving `Public/` (dev via `swift run` and
-packaged `.app` both resolve it through `Bundle.module`), then four JSON/multipart routes:
+packaged `.app` both resolve it through `Bundle.module`), then four JSON/binary routes:
 
-- `POST /api/upload` (`UploadController`) — saves the file to a per-clip temp dir, probes
-  duration/dimensions with `AVURLAsset`'s async `load(...)` API, registers the clip in
-  `ClipStore`.
+- `POST /api/upload` (`UploadController`) — takes the raw video bytes as the request body (not
+  `multipart/form-data`), with the filename percent-encoded in an `X-Filename` header, then saves
+  it to a per-clip temp dir, probes duration/dimensions with `AVURLAsset`'s async `load(...)` API,
+  registers the clip in `ClipStore`. Deliberately *not* multipart: multipart-kit's `MultipartParser`
+  restarts its chunk scan at every byte matching the boundary's leading byte (`\r`), which occurs
+  roughly every 256 bytes in binary video data, so an 80-90MB clip turned into ~300K tiny
+  `onBody`/`writeBuffer` callbacks and a ~30s upload even over localhost — confirmed by timing-
+  instrumenting each step (`decode` alone was ~29s of a ~31s upload; disk write, AVFoundation
+  probing, and palette extraction combined were ~0.1s). Sending the file as a raw body instead
+  drops the same 95MB upload to ~1.2s.
 - `GET /api/media/:id` (`MediaController`) — `req.fileio.asyncStreamFile(at:)`, which handles
   HTTP Range requests, needed for `<video>` scrubbing in the browser.
 - `POST /api/export/:id` (`ExportController`) — decodes trim range, corner radius %, aspect
