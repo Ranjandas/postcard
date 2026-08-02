@@ -203,6 +203,7 @@
     const endLabel = cardEl.querySelector('.trim-end-label');
     const durationLabel = cardEl.querySelector('.trim-duration-label');
     const exportBtn = cardEl.querySelector('.export-btn');
+    const deleteBtn = cardEl.querySelector('.delete-btn');
     const statusText = cardEl.querySelector('.status-text');
 
     const duration = data.durationSeconds;
@@ -221,6 +222,7 @@
 
     const clip = {
       id: data.id,
+      cardEl,
       video,
       previewBox,
       startInput,
@@ -229,6 +231,7 @@
       startLabel,
       endLabel,
       exportBtn,
+      deleteBtn,
       statusText,
       duration,
     };
@@ -348,6 +351,7 @@
     resizeObserver.observe(video);
 
     exportBtn.addEventListener('click', () => exportClip(clip));
+    deleteBtn.addEventListener('click', () => removeClip(clip));
 
     applyGlobalControlsToCard(clip);
     updateRangeBar();
@@ -401,6 +405,16 @@
     } finally {
       clip.exportBtn.disabled = false;
     }
+  }
+
+  function removeClip(clip) {
+    if (activePlayingClip === clip) activePlayingClip = null;
+    clip.video.pause();
+    resizeObserver.unobserve(clip.video);
+    clips.delete(clip.id);
+    clip.cardEl.remove();
+    if (clips.size === 0) globalControls.hidden = true;
+    fetch(`/api/clip/${clip.id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   exportAllBtn.addEventListener('click', async () => {

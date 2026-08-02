@@ -22,4 +22,9 @@ actor ClipStore {
     func clip(id: String) -> Clip? {
         clips[id]
     }
+
+    @discardableResult
+    func remove(id: String) -> Clip? {
+        clips.removeValue(forKey: id)
+    }
 }

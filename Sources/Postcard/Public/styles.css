@@ -516,6 +516,18 @@ button.secondary:hover:not(:disabled),
   display: block;
 }
 
+.clip-info {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.clip-info-text {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .clip-name {
   font-weight: 600;
   font-size: 0.88rem;
@@ -528,6 +540,27 @@ button.secondary:hover:not(:disabled),
   font-size: 0.78rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.delete-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.delete-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--error);
+  filter: none;
+}
+
+.delete-btn:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 /* --- Trim control ---------------------------------------------------------- */
