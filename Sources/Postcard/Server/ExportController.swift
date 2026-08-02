@@ -19,6 +19,10 @@ enum ExportController {
         let padding = min(max(body.paddingPercent, 0), 40)
         let ratioWidth = max(body.aspectRatioWidth, 0.01)
         let ratioHeight = max(body.aspectRatioHeight, 0.01)
+        let colorComponents = parseHexColor(body.backgroundColorHex)
+        let background: BackgroundMode = body.backgroundMode == "blur"
+            ? .blur
+            : .color(red: colorComponents.red, green: colorComponents.green, blue: colorComponents.blue)
 
         let outDir = try OutputLocation.ensureOutputDirectory()
         let outURL = OutputLocation.uniqueOutputURL(in: outDir, baseName: clip.originalFilename)
@@ -30,9 +34,24 @@ enum ExportController {
             trimEnd: CMTime(seconds: end, preferredTimescale: 600),
             cornerRadiusPercent: radius,
             canvasSize: canvasSize(ratioWidth: ratioWidth, ratioHeight: ratioHeight),
-            horizontalPaddingPercent: padding
+            horizontalPaddingPercent: padding,
+            background: background
         ))
 
         return ExportResponse(id: id, outputPath: outURL.path)
+    }
+
+    /// Parses a `#rrggbb` (or `rrggbb`) string into 0...1 components, falling back to white for
+    /// anything malformed rather than failing the export over a bad color value.
+    private static func parseHexColor(_ hex: String) -> (red: CGFloat, green: CGFloat, blue: CGFloat) {
+        var s = hex
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let value = UInt32(s, radix: 16) else {
+            return (1, 1, 1)
+        }
+        let r = CGFloat((value >> 16) & 0xff) / 255
+        let g = CGFloat((value >> 8) & 0xff) / 255
+        let b = CGFloat(value & 0xff) / 255
+        return (r, g, b)
     }
 }

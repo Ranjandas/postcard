@@ -192,7 +192,8 @@
   }
 
   function initializeClip(cardEl, data) {
-    const video = cardEl.querySelector('video');
+    const video = cardEl.querySelector('video.main-video');
+    const bgBlurVideo = cardEl.querySelector('video.bg-blur-video');
     const previewBox = cardEl.querySelector('.canvas-preview');
     const playOverlay = cardEl.querySelector('.play-overlay');
     const startInput = cardEl.querySelector('.trim-start');
@@ -205,9 +206,14 @@
     const exportBtn = cardEl.querySelector('.export-btn');
     const deleteBtn = cardEl.querySelector('.delete-btn');
     const statusText = cardEl.querySelector('.status-text');
+    const bgSwatches = cardEl.querySelector('.bg-swatches');
+    const bgCustomSwatch = cardEl.querySelector('.bg-custom-swatch');
+    const bgColorInput = cardEl.querySelector('.bg-color-input');
+    const bgBlurBtn = cardEl.querySelector('.bg-blur-btn');
 
     const duration = data.durationSeconds;
     video.src = `/api/media/${data.id}`;
+    bgBlurVideo.src = `/api/media/${data.id}`;
     cardEl.querySelector('.clip-meta').textContent =
       `${data.width}×${data.height} • ${formatTime(duration)}`;
 
@@ -234,8 +240,61 @@
       deleteBtn,
       statusText,
       duration,
+      backgroundMode: 'color',
+      backgroundColor: '#ffffff',
     };
     clips.set(data.id, clip);
+
+    // --- Background: suggested palette, custom color, blur toggle -----------
+
+    function clearActiveBackgroundControls() {
+      bgSwatches.querySelectorAll('.bg-swatch').forEach(el => el.classList.remove('active'));
+      bgCustomSwatch.classList.remove('active');
+      bgBlurBtn.classList.remove('active');
+    }
+
+    function activeElementForColor(hex) {
+      const match = Array.from(bgSwatches.querySelectorAll('.bg-swatch')).find(el => el.dataset.hex === hex);
+      return match || bgCustomSwatch;
+    }
+
+    function selectBackgroundColor(hex, activeEl) {
+      clip.backgroundMode = 'color';
+      clip.backgroundColor = hex;
+      previewBox.classList.remove('bg-is-blur');
+      previewBox.style.backgroundColor = hex;
+      bgColorInput.value = hex;
+      clearActiveBackgroundControls();
+      activeEl.classList.add('active');
+    }
+
+    (data.suggestedColors || []).forEach(hex => {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'bg-swatch';
+      swatch.style.background = hex;
+      swatch.title = hex;
+      swatch.dataset.hex = hex;
+      swatch.addEventListener('click', () => selectBackgroundColor(hex, swatch));
+      bgSwatches.appendChild(swatch);
+    });
+
+    bgColorInput.addEventListener('input', () => {
+      selectBackgroundColor(bgColorInput.value, bgCustomSwatch);
+    });
+
+    bgBlurBtn.addEventListener('click', () => {
+      if (clip.backgroundMode === 'blur') {
+        // Toggle back off — restore whatever color was selected before blur was turned on.
+        selectBackgroundColor(clip.backgroundColor, activeElementForColor(clip.backgroundColor));
+        return;
+      }
+      clip.backgroundMode = 'blur';
+      previewBox.classList.add('bg-is-blur');
+      previewBox.style.backgroundColor = '';
+      clearActiveBackgroundControls();
+      bgBlurBtn.classList.add('active');
+    });
 
     function updateRangeBar() {
       const start = parseFloat(startInput.value);
@@ -251,6 +310,7 @@
     function updatePlayhead() {
       const pct = duration ? (video.currentTime / duration) * 100 : 0;
       playhead.style.left = `${Math.min(Math.max(pct, 0), 100)}%`;
+      if (bgBlurVideo.readyState > 0) bgBlurVideo.currentTime = video.currentTime;
     }
 
     startInput.addEventListener('input', () => {
@@ -322,6 +382,7 @@
       previewBox.classList.add('is-playing');
       playOverlay.setAttribute('aria-label', 'Pause');
       if (playheadRaf === null) playheadRaf = requestAnimationFrame(tickPlayhead);
+      bgBlurVideo.play().catch(() => {});
     });
 
     video.addEventListener('pause', () => {
@@ -333,6 +394,7 @@
         playheadRaf = null;
       }
       updatePlayhead();
+      bgBlurVideo.pause();
     });
 
     video.addEventListener('timeupdate', () => {
@@ -392,6 +454,8 @@
           aspectRatioWidth: currentAspect.w,
           aspectRatioHeight: currentAspect.h,
           paddingPercent: currentPaddingPercent(),
+          backgroundMode: clip.backgroundMode,
+          backgroundColorHex: clip.backgroundColor,
         }),
       });
       if (!res.ok) throw new Error(`export failed (${res.status})`);

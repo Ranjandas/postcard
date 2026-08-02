@@ -2,6 +2,11 @@ import AVFoundation
 import CoreGraphics
 import QuartzCore
 
+enum BackgroundMode: Sendable {
+    case color(red: CGFloat, green: CGFloat, blue: CGFloat)
+    case blur
+}
+
 struct ExportParameters: Sendable {
     let sourceURL: URL
     let outputURL: URL
@@ -10,12 +15,14 @@ struct ExportParameters: Sendable {
     let cornerRadiusPercent: Double // 0...100
     let canvasSize: CGSize // e.g. 1080x1350
     let horizontalPaddingPercent: Double // 0...100, of canvas width, applied equally left/right
+    let background: BackgroundMode
 }
 
 enum VideoProcessorError: Error {
     case noVideoTrack
     case compositionTrackCreationFailed
     case exportSessionCreationFailed
+    case compositingFailed
 }
 
 /// Computes the "contain" fit of `size` inside `bounds`, centered. `horizontalPadding` (in
@@ -31,6 +38,20 @@ func fittedRect(fitting size: CGSize, in bounds: CGSize, horizontalPadding: CGFl
         y: (bounds.height - fitted.height) / 2,
         width: fitted.width,
         height: fitted.height
+    )
+}
+
+/// The "cover" fit of `size` inside `bounds`, centered — same idea as `fittedRect` but scaling by
+/// the larger ratio so `size` fills `bounds` completely (overflowing on one axis) instead of
+/// being fully contained. Used for the blurred background fill, which should have no letterboxing.
+func coveringRect(filling size: CGSize, in bounds: CGSize) -> CGRect {
+    let scale = max(bounds.width / size.width, bounds.height / size.height)
+    let filled = CGSize(width: size.width * scale, height: size.height * scale)
+    return CGRect(
+        x: (bounds.width - filled.width) / 2,
+        y: (bounds.height - filled.height) / 2,
+        width: filled.width,
+        height: filled.height
     )
 }
 
@@ -113,49 +134,82 @@ enum VideoProcessor {
         let fps = nominalFrameRate > 0 ? Double(nominalFrameRate) : 30.0
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps.rounded()))
 
-        let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: compVideoTrack.timeRange.duration)
-        instruction.backgroundColor = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
-        let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
-        layerInstruction.setTransform(finalTransform, at: .zero)
-        instruction.layerInstructions = [layerInstruction]
-        videoComposition.instructions = [instruction]
-
-        // 5) Rounded corners via a true alpha mask (not a painted-over shape): a white
-        // background layer sits behind the video layer, and the video layer's `.mask` clips it
-        // to a rounded rect matching `fittedVideoRect`. Core Animation's mask compositing
-        // anti-aliases this edge properly; painting a flat vector shape directly onto the
-        // decoded frame (the earlier approach) left a visible hard seam once H.264 compressed
-        // across it.
-        let parentLayer = CALayer()
-        parentLayer.frame = CGRect(origin: .zero, size: params.canvasSize)
-        parentLayer.isGeometryFlipped = true
-
-        let backgroundLayer = CALayer()
-        backgroundLayer.frame = parentLayer.bounds
-        backgroundLayer.backgroundColor = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
-        parentLayer.addSublayer(backgroundLayer)
-
-        let videoLayer = CALayer()
-        videoLayer.frame = parentLayer.bounds
-        videoLayer.allowsEdgeAntialiasing = true
-        parentLayer.addSublayer(videoLayer)
-
         let radius = cornerRadius(forPercent: params.cornerRadiusPercent, ofRect: fittedVideoRect)
-        if radius > 0 {
-            let maskLayer = CAShapeLayer()
-            maskLayer.frame = parentLayer.bounds
-            maskLayer.path = CGPath(
-                roundedRect: fittedVideoRect, cornerWidth: radius, cornerHeight: radius, transform: nil
-            )
-            maskLayer.fillColor = CGColor(gray: 1, alpha: 1)
-            maskLayer.allowsEdgeAntialiasing = true
-            videoLayer.mask = maskLayer
-        }
 
-        videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
-            postProcessingAsVideoLayer: videoLayer, in: parentLayer
-        )
+        switch params.background {
+        case .color(let red, let green, let blue):
+            let backgroundColor = CGColor(red: red, green: green, blue: blue, alpha: 1)
+
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: .zero, duration: compVideoTrack.timeRange.duration)
+            instruction.backgroundColor = backgroundColor
+            let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
+            layerInstruction.setTransform(finalTransform, at: .zero)
+            instruction.layerInstructions = [layerInstruction]
+            videoComposition.instructions = [instruction]
+
+            // 5) Rounded corners via a true alpha mask (not a painted-over shape): a solid
+            // background layer sits behind the video layer, and the video layer's `.mask` clips it
+            // to a rounded rect matching `fittedVideoRect`. Core Animation's mask compositing
+            // anti-aliases this edge properly; painting a flat vector shape directly onto the
+            // decoded frame (the earlier approach) left a visible hard seam once H.264 compressed
+            // across it.
+            let parentLayer = CALayer()
+            parentLayer.frame = CGRect(origin: .zero, size: params.canvasSize)
+            parentLayer.isGeometryFlipped = true
+
+            let backgroundLayer = CALayer()
+            backgroundLayer.frame = parentLayer.bounds
+            backgroundLayer.backgroundColor = backgroundColor
+            parentLayer.addSublayer(backgroundLayer)
+
+            let videoLayer = CALayer()
+            videoLayer.frame = parentLayer.bounds
+            videoLayer.allowsEdgeAntialiasing = true
+            parentLayer.addSublayer(videoLayer)
+
+            if radius > 0 {
+                let maskLayer = CAShapeLayer()
+                maskLayer.frame = parentLayer.bounds
+                maskLayer.path = CGPath(
+                    roundedRect: fittedVideoRect, cornerWidth: radius, cornerHeight: radius, transform: nil
+                )
+                maskLayer.fillColor = CGColor(gray: 1, alpha: 1)
+                maskLayer.allowsEdgeAntialiasing = true
+                videoLayer.mask = maskLayer
+            }
+
+            videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+                postProcessingAsVideoLayer: videoLayer, in: parentLayer
+            )
+
+        case .blur:
+            // A flat CALayer can't show live video content, so there's no Core Animation trick
+            // for "blurred copy of this same video" the way there is for a solid-color background
+            // — this instead goes through a custom AVVideoCompositing (BlurredBackgroundCompositor)
+            // that receives the raw decoded frame and, per frame, derives both a blurred "cover"
+            // fill (via Core Image) and the same sharp "contain, centered, rounded" foreground the
+            // color path produces, then composites them itself.
+            let orientTransform = preferredTransform.concatenating(normalize)
+            let coverRect = coveringRect(filling: orientedSize, in: params.canvasSize)
+            let backgroundTransform = orientTransform
+                .concatenating(CGAffineTransform(
+                    scaleX: coverRect.width / orientedSize.width, y: coverRect.height / orientedSize.height
+                ))
+                .concatenating(CGAffineTransform(translationX: coverRect.origin.x, y: coverRect.origin.y))
+
+            let blurInstruction = BlurredBackgroundInstruction(
+                timeRange: CMTimeRange(start: .zero, duration: compVideoTrack.timeRange.duration),
+                sourceTrackID: compVideoTrack.trackID,
+                foregroundTransform: finalTransform,
+                backgroundTransform: backgroundTransform,
+                fittedVideoRect: fittedVideoRect,
+                cornerRadius: radius,
+                canvasSize: params.canvasSize
+            )
+            videoComposition.instructions = [blurInstruction]
+            videoComposition.customVideoCompositorClass = BlurredBackgroundCompositor.self
+        }
 
         // 6) Export (hardware-accelerated H.264 encode via VideoToolbox).
         guard let exportSession = AVAssetExportSession(

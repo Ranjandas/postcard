@@ -81,7 +81,8 @@
 <template id="clip-card-template">
   <article class="clip-card">
     <div class="canvas-preview">
-      <video playsinline preload="metadata"></video>
+      <video class="bg-blur-video" muted playsinline preload="metadata"></video>
+      <video class="main-video" playsinline preload="metadata"></video>
       <button type="button" class="play-overlay" aria-label="Play">
         <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
         <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"></path></svg>
@@ -101,6 +102,14 @@
           <path d="M14 11v6"></path>
         </svg>
       </button>
+    </div>
+    <div class="background-control">
+      <span class="control-label-sm">Background</span>
+      <div class="bg-swatches"></div>
+      <label class="bg-custom-swatch" title="Custom color">
+        <input type="color" class="bg-color-input" value="#ffffff">
+      </label>
+      <button type="button" class="bg-blur-btn" title="Fill the background with a blurred copy of the video">Blur</button>
     </div>
     <div class="trim-control">
       <div class="trim-track">

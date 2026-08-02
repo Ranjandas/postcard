@@ -10,6 +10,7 @@ struct UploadResponse: Content {
     let durationSeconds: Double
     let width: Int
     let height: Int
+    let suggestedColors: [String]
 }
 
 struct ExportRequestBody: Content {
@@ -19,6 +20,8 @@ struct ExportRequestBody: Content {
     let aspectRatioWidth: Double
     let aspectRatioHeight: Double
     let paddingPercent: Double
+    let backgroundMode: String
+    let backgroundColorHex: String
 }
 
 struct ExportResponse: Content {

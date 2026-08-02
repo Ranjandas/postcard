@@ -26,6 +26,8 @@ enum UploadController {
         let orientedRect = CGRect(origin: .zero, size: naturalSize).applying(transform)
         let orientedSize = CGSize(width: abs(orientedRect.width), height: abs(orientedRect.height))
 
+        let suggestedColors = await PaletteExtractor.extractPalette(from: destURL, duration: duration)
+
         await ClipStore.shared.register(.init(
             id: id,
             originalFilename: form.file.filename,
@@ -39,7 +41,8 @@ enum UploadController {
             filename: form.file.filename,
             durationSeconds: duration.seconds,
             width: Int(orientedSize.width),
-            height: Int(orientedSize.height)
+            height: Int(orientedSize.height),
+            suggestedColors: suggestedColors
         )
     }
 }
