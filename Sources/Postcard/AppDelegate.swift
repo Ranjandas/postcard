@@ -9,6 +9,7 @@ import Foundation
     private let hostname = "127.0.0.1"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setUpMainMenu()
         setUpStatusItem()
         Task {
             do {
@@ -61,6 +62,19 @@ import Foundation
             sem.signal()
         }
         sem.wait()
+    }
+
+    /// Accessory apps (no Dock icon) never get a visible menu bar, so without this,
+    /// Cmd+Q has no main menu to route to and silently does nothing — the status
+    /// item's own "Quit" key equivalent only fires while that dropdown is open.
+    private func setUpMainMenu() {
+        let mainMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit Postcard", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenuItem.submenu = appMenu
+        NSApp.mainMenu = mainMenu
     }
 
     private func setUpStatusItem() {
