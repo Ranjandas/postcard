@@ -6,6 +6,7 @@
   const radiusValue = document.getElementById('radius-value');
   const paddingSlider = document.getElementById('padding-slider');
   const paddingValue = document.getElementById('padding-value');
+  const globalBlurBtn = document.getElementById('global-blur-btn');
   const ratioButtons = Array.from(document.querySelectorAll('.ratio-btn'));
   const segmentedIndicator = document.querySelector('.segmented-indicator');
   const exportAllBtn = document.getElementById('export-all-btn');
@@ -30,6 +31,12 @@
 
   let currentAspect = readActiveAspectRatio();
   let activePlayingClip = null;
+  // Not a forced/override state — just the default background mode assigned to newly uploaded
+  // clips, and a bulk "set every current clip to this" action when clicked. Each clip keeps its
+  // own independent backgroundMode afterward (see setClipBackgroundBlur/setClipBackgroundColor),
+  // so this can drift out of sync with individual clips — that's expected, same as a "select all"
+  // checkbox going stale the moment one item is changed by hand.
+  let globalBlurDefault = false;
 
   // Corner radius is sized off the preview *element* (video/img/crop-wrapper — the fitted media
   // rect), while a caption is sized off the *canvas box* itself (`.canvas-preview`), so the same
@@ -155,6 +162,66 @@
     refreshEditorIfOpen();
   }
 
+  // Background is per-clip (color swatches, or that clip's own blur toggle) — but the card's own
+  // controls and the editor's controls (whichever clip is currently open in it) are two separate
+  // DOM regions showing the *same* clip's state, so every mutation needs to refresh both. `els` is
+  // just {bgSwatches, bgCustomSwatch, bgColorInput, bgBlurBtn} for whichever region is being
+  // refreshed — a video card's own row (clip.ownBackgroundEls) or the shared editor sidebar.
+  function clearBackgroundActiveState(els) {
+    if (!els) return;
+    els.bgSwatches.querySelectorAll('.bg-swatch').forEach(el => el.classList.remove('active'));
+    els.bgCustomSwatch.classList.remove('active');
+    els.bgBlurBtn.classList.remove('active');
+  }
+
+  function findSwatchForColor(els, hex) {
+    const match = Array.from(els.bgSwatches.querySelectorAll('.bg-swatch')).find(el => el.dataset.hex === hex);
+    return match || els.bgCustomSwatch;
+  }
+
+  function refreshBackgroundControlUI(els, clip) {
+    if (!els) return;
+    clearBackgroundActiveState(els);
+    if (clip.backgroundMode === 'blur') {
+      els.bgBlurBtn.classList.add('active');
+    } else {
+      els.bgColorInput.value = clip.backgroundColor;
+      findSwatchForColor(els, clip.backgroundColor).classList.add('active');
+    }
+  }
+
+  function applyClipBackgroundVisual(clip) {
+    const isBlur = clip.backgroundMode === 'blur';
+    clip.previewBox.classList.toggle('bg-is-blur', isBlur);
+    clip.previewBox.style.backgroundColor = isBlur ? '' : clip.backgroundColor;
+    refreshBackgroundControlUI(clip.ownBackgroundEls, clip);
+    if (currentEditingClip === clip) {
+      editorCanvasPreview.classList.toggle('bg-is-blur', isBlur);
+      editorCanvasPreview.style.backgroundColor = isBlur ? '' : clip.backgroundColor;
+      refreshBackgroundControlUI(editorBackgroundEls, clip);
+    }
+  }
+
+  function setClipBackgroundColor(clip, hex) {
+    clip.backgroundColor = hex;
+    clip.backgroundMode = 'color';
+    applyClipBackgroundVisual(clip);
+  }
+
+  function setClipBackgroundBlur(clip, isBlur) {
+    clip.backgroundMode = isBlur ? 'blur' : 'color';
+    applyClipBackgroundVisual(clip);
+  }
+
+  // The global button is a bulk action, not a per-clip override: it sets every clip *currently*
+  // loaded to match, and becomes the default handed to clips uploaded from now on — but each clip
+  // remains independently switchable afterward via its own Blur button (card row, or editor).
+  globalBlurBtn.addEventListener('click', () => {
+    globalBlurDefault = !globalBlurDefault;
+    globalBlurBtn.classList.toggle('active', globalBlurDefault);
+    clips.forEach(clip => setClipBackgroundBlur(clip, globalBlurDefault));
+  });
+
   radiusSlider.addEventListener('input', () => {
     radiusValue.textContent = `${radiusSlider.value}%`;
     updateSliderFill(radiusSlider);
@@ -274,32 +341,11 @@
   // instead — see setupEditorBackgroundControls below, which follows the same shape but binds to
   // whichever clip is currently open rather than one fixed at setup time).
   function setupBackgroundControls(cardEl, clip, suggestedColors) {
-    const previewBox = clip.previewBox;
     const bgSwatches = cardEl.querySelector('.bg-swatches');
     const bgCustomSwatch = cardEl.querySelector('.bg-custom-swatch');
     const bgColorInput = cardEl.querySelector('.bg-color-input');
     const bgBlurBtn = cardEl.querySelector('.bg-blur-btn');
-
-    function clearActiveBackgroundControls() {
-      bgSwatches.querySelectorAll('.bg-swatch').forEach(el => el.classList.remove('active'));
-      bgCustomSwatch.classList.remove('active');
-      bgBlurBtn.classList.remove('active');
-    }
-
-    function activeElementForColor(hex) {
-      const match = Array.from(bgSwatches.querySelectorAll('.bg-swatch')).find(el => el.dataset.hex === hex);
-      return match || bgCustomSwatch;
-    }
-
-    function selectBackgroundColor(hex, activeEl) {
-      clip.backgroundMode = 'color';
-      clip.backgroundColor = hex;
-      previewBox.classList.remove('bg-is-blur');
-      previewBox.style.backgroundColor = hex;
-      bgColorInput.value = hex;
-      clearActiveBackgroundControls();
-      activeEl.classList.add('active');
-    }
+    clip.ownBackgroundEls = { bgSwatches, bgCustomSwatch, bgColorInput, bgBlurBtn };
 
     (suggestedColors || []).forEach(hex => {
       const swatch = document.createElement('button');
@@ -308,26 +354,12 @@
       swatch.style.background = hex;
       swatch.title = hex;
       swatch.dataset.hex = hex;
-      swatch.addEventListener('click', () => selectBackgroundColor(hex, swatch));
+      swatch.addEventListener('click', () => setClipBackgroundColor(clip, hex));
       bgSwatches.appendChild(swatch);
     });
 
-    bgColorInput.addEventListener('input', () => {
-      selectBackgroundColor(bgColorInput.value, bgCustomSwatch);
-    });
-
-    bgBlurBtn.addEventListener('click', () => {
-      if (clip.backgroundMode === 'blur') {
-        // Toggle back off — restore whatever color was selected before blur was turned on.
-        selectBackgroundColor(clip.backgroundColor, activeElementForColor(clip.backgroundColor));
-        return;
-      }
-      clip.backgroundMode = 'blur';
-      previewBox.classList.add('bg-is-blur');
-      previewBox.style.backgroundColor = '';
-      clearActiveBackgroundControls();
-      bgBlurBtn.classList.add('active');
-    });
+    bgColorInput.addEventListener('input', () => setClipBackgroundColor(clip, bgColorInput.value));
+    bgBlurBtn.addEventListener('click', () => setClipBackgroundBlur(clip, clip.backgroundMode !== 'blur'));
   }
 
   // Video-card-only (photo captions are edited in the big editor instead, matching how
@@ -435,8 +467,8 @@
       deleteBtn,
       statusText,
       duration,
-      backgroundMode: 'color',
       backgroundColor: '#ffffff',
+      backgroundMode: globalBlurDefault ? 'blur' : 'color',
       caption: '',
       captionFont: 'montserrat',
       captionSizePercent: 6,
@@ -448,6 +480,7 @@
     clips.set(data.id, clip);
 
     setupBackgroundControls(cardEl, clip, data.suggestedColors);
+    applyClipBackgroundVisual(clip);
     setupCaptionControls(cardEl, clip);
 
     function updateRangeBar() {
@@ -579,6 +612,7 @@
 
   function initializePhotoClip(cardEl, data) {
     const img = cardEl.querySelector('img.main-img');
+    const bgBlurImg = cardEl.querySelector('img.bg-blur-img');
     const previewBox = cardEl.querySelector('.canvas-preview');
     const exportBtn = cardEl.querySelector('.export-btn');
     const deleteBtn = cardEl.querySelector('.delete-btn');
@@ -586,6 +620,7 @@
     const editOverlay = cardEl.querySelector('.edit-overlay');
 
     img.src = `/api/media/${data.id}`;
+    bgBlurImg.src = `/api/media/${data.id}`;
     cardEl.querySelector('.clip-meta').textContent = `${data.width}×${data.height}`;
 
     const clip = {
@@ -600,8 +635,8 @@
       naturalWidth: data.width,
       naturalHeight: data.height,
       suggestedColors: data.suggestedColors || [],
-      backgroundMode: 'color',
       backgroundColor: '#ffffff',
+      backgroundMode: globalBlurDefault ? 'blur' : 'color',
       crop: { x: 0, y: 0, width: 1, height: 1 },
       exposure: 0,
       highlights: 0,
@@ -618,6 +653,7 @@
       captionAnchor: 'bottom',
     };
     clips.set(data.id, clip);
+    applyClipBackgroundVisual(clip);
 
     img.addEventListener('load', () => applyRadiusToPreviewElement(img));
     resizeObserver.observe(img);
@@ -673,6 +709,10 @@
   const editorBgCustomSwatch = photoEditor.querySelector('.editor-background-control .bg-custom-swatch');
   const editorBgColorInput = photoEditor.querySelector('.editor-background-control .bg-color-input');
   const editorBgBlurBtn = photoEditor.querySelector('.editor-background-control .bg-blur-btn');
+  const editorBackgroundEls = {
+    bgSwatches: editorBgSwatches, bgCustomSwatch: editorBgCustomSwatch,
+    bgColorInput: editorBgColorInput, bgBlurBtn: editorBgBlurBtn,
+  };
 
   const editorCaptionOverlay = photoEditor.querySelector('.editor-caption-overlay');
   const editorCaptionPill = editorCaptionOverlay.querySelector('.caption-pill');
@@ -747,49 +787,12 @@
 
   // --- Background (shared shape with setupBackgroundControls, bound to currentEditingClip) ---
 
-  function editorClearActiveBackground() {
-    editorBgSwatches.querySelectorAll('.bg-swatch').forEach(el => el.classList.remove('active'));
-    editorBgCustomSwatch.classList.remove('active');
-    editorBgBlurBtn.classList.remove('active');
-  }
-
-  function editorActiveElementForColor(hex) {
-    const match = Array.from(editorBgSwatches.querySelectorAll('.bg-swatch')).find(el => el.dataset.hex === hex);
-    return match || editorBgCustomSwatch;
-  }
-
-  function editorSelectBackgroundColor(hex, activeEl) {
-    if (!currentEditingClip) return;
-    currentEditingClip.backgroundMode = 'color';
-    currentEditingClip.backgroundColor = hex;
-    editorCanvasPreview.classList.remove('bg-is-blur');
-    editorCanvasPreview.style.backgroundColor = hex;
-    currentEditingClip.previewBox.classList.remove('bg-is-blur');
-    currentEditingClip.previewBox.style.backgroundColor = hex;
-    editorBgColorInput.value = hex;
-    editorClearActiveBackground();
-    activeEl.classList.add('active');
-  }
-
   editorBgColorInput.addEventListener('input', () => {
-    editorSelectBackgroundColor(editorBgColorInput.value, editorBgCustomSwatch);
+    if (currentEditingClip) setClipBackgroundColor(currentEditingClip, editorBgColorInput.value);
   });
 
   editorBgBlurBtn.addEventListener('click', () => {
-    if (!currentEditingClip) return;
-    if (currentEditingClip.backgroundMode === 'blur') {
-      editorSelectBackgroundColor(
-        currentEditingClip.backgroundColor, editorActiveElementForColor(currentEditingClip.backgroundColor)
-      );
-      return;
-    }
-    currentEditingClip.backgroundMode = 'blur';
-    editorCanvasPreview.classList.add('bg-is-blur');
-    editorCanvasPreview.style.backgroundColor = '';
-    currentEditingClip.previewBox.classList.add('bg-is-blur');
-    currentEditingClip.previewBox.style.backgroundColor = '';
-    editorClearActiveBackground();
-    editorBgBlurBtn.classList.add('active');
+    if (currentEditingClip) setClipBackgroundBlur(currentEditingClip, currentEditingClip.backgroundMode !== 'blur');
   });
 
   function renderEditorBackground(clip) {
@@ -801,20 +804,10 @@
       swatch.style.background = hex;
       swatch.title = hex;
       swatch.dataset.hex = hex;
-      swatch.addEventListener('click', () => editorSelectBackgroundColor(hex, swatch));
+      swatch.addEventListener('click', () => setClipBackgroundColor(clip, hex));
       editorBgSwatches.appendChild(swatch);
     });
-    editorClearActiveBackground();
-    if (clip.backgroundMode === 'blur') {
-      editorCanvasPreview.classList.add('bg-is-blur');
-      editorCanvasPreview.style.backgroundColor = '';
-      editorBgBlurBtn.classList.add('active');
-    } else {
-      editorCanvasPreview.classList.remove('bg-is-blur');
-      editorCanvasPreview.style.backgroundColor = clip.backgroundColor;
-      editorBgColorInput.value = clip.backgroundColor;
-      editorActiveElementForColor(clip.backgroundColor).classList.add('active');
-    }
+    applyClipBackgroundVisual(clip);
   }
 
   // --- Caption (editor side — mirrors setupCaptionControls above, bound to currentEditingClip

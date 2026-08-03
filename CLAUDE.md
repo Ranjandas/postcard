@@ -169,6 +169,27 @@ sequence for the blurred background fill.
   lessons generalize: when validating a `CIFilter`, render real pixels and compare numbers, don't
   reason from the parameter's description alone.
 
+### Background control: per-clip state, with a global bulk/default action
+
+Background (a solid/custom color, or a blurred copy of the clip's own footage) is **per-clip**
+state (`clip.backgroundMode` + `clip.backgroundColor`) — unlike aspect ratio/corner radius/padding
+above, it is not a single value shared by the whole batch. Every clip (a video card's own row, or
+a photo via the editor) has its own color swatches and its own Blur button. The "Blur all clips"
+button in `#global-controls` is deliberately *not* a forced/override state: clicking it (1)
+bulk-applies `backgroundMode: 'blur'` (or `'color'`) to every clip currently loaded, and (2)
+becomes the default `backgroundMode` handed to clips uploaded afterward — but every clip stays
+independently switchable afterward via its own Blur button, so the global button's own
+active/inactive look can (and will) drift out of sync with individual clips the moment one is
+changed by hand, the same way a "select all" checkbox goes stale once one item is toggled on its
+own.
+
+`setClipBackgroundColor`/`setClipBackgroundBlur` (`app.js`) are the single place that mutates a
+clip's background — called from the per-clip swatches/Blur button (video card or editor) and
+looped over every clip from the global button — and `applyClipBackgroundVisual` keeps both UI
+surfaces for that clip in sync: the card's own preview/controls, and, if that same clip happens to
+be the one open in the editor, the editor's preview/controls too (checked via `currentEditingClip
+=== clip`).
+
 ### Photo editor UI (`Public/app.js`, the `#photo-editor` overlay in `index.html`)
 
 Photo editing (crop + the six tonal sliders + background) happens in a single, large, reusable
