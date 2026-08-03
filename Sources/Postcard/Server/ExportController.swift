@@ -18,11 +18,11 @@ enum ExportController {
         let background: BackgroundMode = body.backgroundMode == "blur"
             ? .blur
             : .color(red: colorComponents.red, green: colorComponents.green, blue: colorComponents.blue)
-        let canvas = canvasSize(ratioWidth: ratioWidth, ratioHeight: ratioHeight)
         let outDir = try OutputLocation.ensureOutputDirectory()
 
         switch clip.kind {
         case .video(let duration):
+            let canvas = canvasSize(ratioWidth: ratioWidth, ratioHeight: ratioHeight)
             let start = max(0, body.trimStart)
             let end = min(duration.seconds, body.trimEnd)
             guard start < end else {
@@ -42,6 +42,18 @@ enum ExportController {
             return ExportResponse(id: id, outputPath: outURL.path)
 
         case .photo:
+            let crop = CropRect(
+                x: body.cropX, y: body.cropY,
+                width: min(max(body.cropWidth, 0.01), 1), height: min(max(body.cropHeight, 0.01), 1)
+            )
+            let croppedContentSize = CGSize(
+                width: clip.orientedSize.width * crop.width, height: clip.orientedSize.height * crop.height
+            )
+            let shortSide = nativeShortSide(
+                contentSize: croppedContentSize, ratioWidth: ratioWidth, ratioHeight: ratioHeight,
+                horizontalPaddingPercent: padding
+            )
+            let canvas = canvasSize(ratioWidth: ratioWidth, ratioHeight: ratioHeight, shortSide: shortSide)
             let outURL = OutputLocation.uniqueOutputURL(in: outDir, baseName: clip.originalFilename, extension: "jpg")
             try PhotoProcessor.export(.init(
                 sourceURL: clip.sourceURL,
@@ -50,7 +62,7 @@ enum ExportController {
                 canvasSize: canvas,
                 horizontalPaddingPercent: padding,
                 background: background,
-                crop: CropRect(x: body.cropX, y: body.cropY, width: body.cropWidth, height: body.cropHeight),
+                crop: crop,
                 exposurePercent: body.exposurePercent,
                 highlightsPercent: body.highlightsPercent,
                 shadowsPercent: body.shadowsPercent,

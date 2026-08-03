@@ -69,6 +69,29 @@ func canvasSize(ratioWidth: Double, ratioHeight: Double, shortSide: CGFloat = 10
     }
 }
 
+/// The canvas `shortSide` (see `canvasSize`) that makes `contentSize` land at scale == 1 when run
+/// through `fittedRect` — i.e. the smallest canvas of the given aspect ratio/padding that contains
+/// `contentSize` without any resampling. Used by the photo export path so output resolution scales
+/// with the source photo instead of the video pipeline's fixed 1080p canvas (see `canvasSize`'s
+/// `shortSide` default) — unlike video frames, a photo's native resolution is worth preserving.
+/// One axis comes out exactly matching `contentSize` (whichever is tighter); the other gets
+/// whatever extra letterbox/pillarbox space the aspect ratio requires, same as any other mismatch
+/// between content and canvas aspect ratio.
+func nativeShortSide(
+    contentSize: CGSize, ratioWidth: Double, ratioHeight: Double, horizontalPaddingPercent: Double
+) -> CGFloat {
+    let availableWidthFraction = max(1 - 2 * CGFloat(horizontalPaddingPercent / 100), 0.01)
+    if ratioWidth <= ratioHeight {
+        let sFromWidth = contentSize.width / availableWidthFraction
+        let sFromHeight = contentSize.height * CGFloat(ratioWidth / ratioHeight)
+        return max(sFromWidth, sFromHeight)
+    } else {
+        let sFromHeight = contentSize.height
+        let sFromWidth = contentSize.width * CGFloat(ratioHeight / ratioWidth) / availableWidthFraction
+        return max(sFromWidth, sFromHeight)
+    }
+}
+
 /// Corner radius in points for a given `percent` (0...100) of a rect's short side.
 /// 100% yields a fully rounded short edge (radius == half the short side).
 func cornerRadius(forPercent percent: Double, ofRect rect: CGRect) -> CGFloat {
