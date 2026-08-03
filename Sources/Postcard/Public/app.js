@@ -562,22 +562,44 @@
     if (currentEditingClip) applyEditorCanvasControls(currentEditingClip);
   }
 
-  function applyCropToPreview(wrapperEl, imgEl, naturalWidth, naturalHeight, crop) {
+  // Mirrors the server's fittedRect(fitting:in:horizontalPadding:) exactly (same "contain,
+  // centered, inset" formula). Needed here — rather than just setting `aspect-ratio` on the
+  // wrapper and letting CSS size it, the way the rest of this app's previews work — because
+  // `.editor-crop-wrapper`'s only child (`.editor-main-img`) is `position: absolute` so it
+  // contributes no intrinsic size; a plain <div> with only `aspect-ratio` and no explicit
+  // width/height has nothing for the browser to size it *from* in that situation (confirmed via
+  // getBoundingClientRect() while debugging: the wrapper rendered at 0×0), so the fit has to be
+  // computed explicitly instead of left to CSS.
+  function fittedBox(contentWidth, contentHeight, boundsWidth, boundsHeight, horizontalPadding) {
+    const availableWidth = Math.max(boundsWidth - horizontalPadding * 2, 1);
+    const scale = Math.min(availableWidth / contentWidth, boundsHeight / contentHeight);
+    return { width: contentWidth * scale, height: contentHeight * scale };
+  }
+
+  function applyCropToPreview(containerEl, wrapperEl, imgEl, naturalWidth, naturalHeight, crop, horizontalPaddingPercent) {
     const cropWidthPx = crop.width * naturalWidth;
     const cropHeightPx = crop.height * naturalHeight;
-    wrapperEl.style.aspectRatio = `${cropWidthPx} / ${cropHeightPx}`;
-    imgEl.style.width = `${(naturalWidth / cropWidthPx) * 100}%`;
-    imgEl.style.height = `${(naturalHeight / cropHeightPx) * 100}%`;
-    imgEl.style.left = `${-(crop.x * naturalWidth / cropWidthPx) * 100}%`;
-    imgEl.style.top = `${-(crop.y * naturalHeight / cropHeightPx) * 100}%`;
+    const containerBox = containerEl.getBoundingClientRect();
+    const horizontalPadding = containerBox.width * (horizontalPaddingPercent / 100);
+    const fitted = fittedBox(cropWidthPx, cropHeightPx, containerBox.width, containerBox.height, horizontalPadding);
+    wrapperEl.style.width = `${fitted.width}px`;
+    wrapperEl.style.height = `${fitted.height}px`;
+    imgEl.style.width = `${(naturalWidth / cropWidthPx) * fitted.width}px`;
+    imgEl.style.height = `${(naturalHeight / cropHeightPx) * fitted.height}px`;
+    imgEl.style.left = `${-(crop.x * naturalWidth / cropWidthPx) * fitted.width}px`;
+    imgEl.style.top = `${-(crop.y * naturalHeight / cropHeightPx) * fitted.height}px`;
   }
 
   function applyEditorCanvasControls(clip) {
     editorCanvasPreview.style.aspectRatio = `${currentAspect.w} / ${currentAspect.h}`;
-    const pad = `${currentPaddingPercent()}%`;
+    const paddingPercent = currentPaddingPercent();
+    const pad = `${paddingPercent}%`;
     editorCanvasPreview.style.paddingLeft = pad;
     editorCanvasPreview.style.paddingRight = pad;
-    applyCropToPreview(editorCropWrapper, editorMainImg, clip.naturalWidth, clip.naturalHeight, clip.crop);
+    applyCropToPreview(
+      editorCanvasPreview, editorCropWrapper, editorMainImg,
+      clip.naturalWidth, clip.naturalHeight, clip.crop, paddingPercent
+    );
     applyRadiusToPreviewElement(editorCropWrapper);
   }
 
