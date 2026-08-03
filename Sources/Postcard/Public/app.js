@@ -829,12 +829,14 @@
     cropResetBtn.hidden = true;
   }
 
-  cropStageImg.addEventListener('load', renderCropRectFromClip);
-  cropToolBtn.addEventListener('click', enterCropTool);
-  cropDoneBtn.addEventListener('click', () => {
+  function confirmCropTool() {
     exitCropTool();
     applyEditorCanvasControls(currentEditingClip);
-  });
+  }
+
+  cropStageImg.addEventListener('load', renderCropRectFromClip);
+  cropToolBtn.addEventListener('click', enterCropTool);
+  cropDoneBtn.addEventListener('click', confirmCropTool);
   cropResetBtn.addEventListener('click', () => {
     if (!currentEditingClip) return;
     currentEditingClip.crop = { x: 0, y: 0, width: 1, height: 1 };
@@ -868,7 +870,13 @@
   editorCloseBtn.addEventListener('click', closeEditor);
   editorBackdrop.addEventListener('click', closeEditor);
   document.addEventListener('keydown', e => {
-    if (!photoEditor.hidden && e.key === 'Escape') closeEditor();
+    if (photoEditor.hidden) return;
+    if (!cropStage.hidden && e.key === 'Enter') {
+      e.preventDefault();
+      confirmCropTool();
+    } else if (e.key === 'Escape') {
+      closeEditor();
+    }
   });
   editorExportBtn.addEventListener('click', () => {
     if (currentEditingClip) exportClip(currentEditingClip, editorStatusText);
