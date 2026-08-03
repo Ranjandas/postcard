@@ -52,6 +52,37 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* --- Caption fonts -------------------------------------------------------
+   Custom (prefixed) family names, deliberately not the fonts' own family names, so a
+   system-installed font of the same common name (e.g. "Montserrat") can never be picked up
+   instead of the exact bundled file the server also renders with. */
+
+@font-face {
+  font-family: "PostcardMontserrat";
+  src: url("/fonts/Montserrat-Variable.ttf") format("truetype");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "PostcardPlayfair";
+  src: url("/fonts/PlayfairDisplay-Variable.ttf") format("truetype");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "PostcardPacifico";
+  src: url("/fonts/Pacifico-Regular.ttf") format("truetype");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "PostcardCaveat";
+  src: url("/fonts/Caveat-Variable.ttf") format("truetype");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "PostcardBebasNeue";
+  src: url("/fonts/BebasNeue-Regular.ttf") format("truetype");
+  font-weight: 400;
+}
+
 /* --- Header ------------------------------------------------------------- */
 
 header {
@@ -505,7 +536,8 @@ button.secondary:hover:not(:disabled),
 .clip-card.is-photo .bg-blur-video,
 .clip-card.is-photo .play-overlay,
 .clip-card.is-photo .trim-control,
-.clip-card.is-photo .background-control {
+.clip-card.is-photo .background-control,
+.clip-card.is-photo .caption-control {
   display: none;
 }
 
@@ -591,6 +623,50 @@ button.secondary:hover:not(:disabled),
 
 .canvas-preview.is-playing .play-overlay .icon-pause {
   display: block;
+}
+
+/* --- Caption overlay (live preview) --------------------------------------
+   Reproduces the server's captionBandRect via ordinary flexbox: a fixed-percent inset, centered
+   horizontally, with align-items driven by the vertical-position control — no bespoke JS layout
+   math needed for positioning (only font-size needs JS recompute, same reason corner radius
+   does; see applyCaptionSizeToPreviewElement). */
+
+.caption-overlay {
+  position: absolute;
+  inset: 6%;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end; /* default vertical position: bottom */
+  pointer-events: none;
+  text-align: center;
+}
+
+.caption-overlay.caption-pos-top {
+  align-items: flex-start;
+}
+
+.caption-overlay.caption-pos-middle {
+  align-items: center;
+}
+
+.caption-pill {
+  display: inline-block;
+  padding: 0.35em 0.6em;
+  border-radius: 0.5em;
+  color: #000;
+  text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.55);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+
+.caption-pill:empty {
+  display: none;
+}
+
+.caption-pill.has-bg {
+  text-shadow: none;
 }
 
 .clip-info {
@@ -722,6 +798,62 @@ button.secondary:hover:not(:disabled),
 .bg-blur-btn.active {
   background: var(--accent);
   color: white;
+}
+
+/* --- Caption control ------------------------------------------------------ */
+
+.caption-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.caption-text-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 0.6rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--control-bg);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.caption-text-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.caption-style-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.caption-font-select {
+  height: 26px;
+  padding: 0 0.4rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--control-bg);
+  color: var(--text);
+  font-size: 0.74rem;
+  flex-shrink: 0;
+}
+
+.caption-bgopacity-slider {
+  width: 70px;
+  flex: 0 0 auto;
+}
+
+.caption-position-group {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.caption-position-group .caption-pos-btn {
+  padding: 0 0.5rem;
 }
 
 /* --- Adjustments control (editor sidebar) --------------------------------- */

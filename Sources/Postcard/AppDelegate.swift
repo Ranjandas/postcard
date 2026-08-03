@@ -26,6 +26,8 @@ import Foundation
     }
 
     private func startServer() async throws {
+        CaptionFonts.registerBundledFonts()
+
         let env = try Environment.detect()
         let app = try await Application.make(env)
         self.vaporApp = app

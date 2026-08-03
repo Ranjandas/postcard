@@ -31,6 +31,7 @@ struct PhotoExportParameters: Sendable {
     let brightnessPercent: Double // -100...100, 0 = no change
     let contrastPercent: Double // -100...100, 0 = no change
     let blackPercent: Double // -100...100, 0 = no change (negative crushes, positive lifts blacks)
+    let caption: CaptionParameters?
 }
 
 enum PhotoProcessorError: Error {
@@ -135,8 +136,13 @@ enum PhotoProcessor {
             composed = foreground.composited(over: background)
         }
 
+        var final = composed
+        if let caption = params.caption, let overlay = CaptionRenderer.rasterize(caption, canvasSize: params.canvasSize) {
+            final = overlay.composited(over: composed)
+        }
+
         guard let cgImage = ciContext.createCGImage(
-            composed, from: canvasRect, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()
+            final, from: canvasRect, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()
         ) else {
             throw PhotoProcessorError.renderFailed
         }

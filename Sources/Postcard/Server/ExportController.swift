@@ -19,6 +19,7 @@ enum ExportController {
             ? .blur
             : .color(red: colorComponents.red, green: colorComponents.green, blue: colorComponents.blue)
         let outDir = try OutputLocation.ensureOutputDirectory()
+        let caption = captionParameters(from: body)
 
         switch clip.kind {
         case .video(let duration):
@@ -37,7 +38,8 @@ enum ExportController {
                 cornerRadiusPercent: radius,
                 canvasSize: canvas,
                 horizontalPaddingPercent: padding,
-                background: background
+                background: background,
+                caption: caption
             ))
             return ExportResponse(id: id, outputPath: outURL.path)
 
@@ -68,10 +70,34 @@ enum ExportController {
                 shadowsPercent: body.shadowsPercent,
                 brightnessPercent: body.brightnessPercent,
                 contrastPercent: body.contrastPercent,
-                blackPercent: body.blackPercent
+                blackPercent: body.blackPercent,
+                caption: caption
             ))
             return ExportResponse(id: id, outputPath: outURL.path)
         }
+    }
+
+    /// `nil` when there's no caption text — every downstream render path skips caption
+    /// compositing entirely on `nil`, so an unused caption costs nothing.
+    private static func captionParameters(from body: ExportRequestBody) -> CaptionParameters? {
+        guard !body.captionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let anchor: CaptionVerticalAnchor
+        switch body.captionAnchor {
+        case "top": anchor = .top
+        case "middle": anchor = .middle
+        default: anchor = .bottom
+        }
+        return CaptionParameters(
+            text: body.captionText,
+            fontKey: body.captionFontKey,
+            sizePercent: min(max(body.captionSizePercent, 1), 30),
+            colorHex: body.captionColorHex,
+            backgroundColorHex: body.captionBgColorHex,
+            backgroundOpacityPercent: min(max(body.captionBgOpacityPercent, 0), 100),
+            anchor: anchor
+        )
     }
 
     /// Parses a `#rrggbb` (or `rrggbb`) string into 0...1 components, falling back to white for

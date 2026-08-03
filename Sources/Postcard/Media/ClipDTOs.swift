@@ -30,6 +30,14 @@ struct ExportRequestBody: Content {
     let brightnessPercent: Double
     let contrastPercent: Double
     let blackPercent: Double
+    // Caption overlay — shared by both media kinds. Empty `captionText` skips rendering entirely.
+    let captionText: String
+    let captionFontKey: String
+    let captionSizePercent: Double
+    let captionColorHex: String
+    let captionBgColorHex: String
+    let captionBgOpacityPercent: Double
+    let captionAnchor: String // "top" / "middle" / "bottom"
 }
 
 struct ExportResponse: Content {

@@ -95,6 +95,9 @@
           <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
         </svg>
       </button>
+      <div class="caption-overlay">
+        <span class="caption-pill"></span>
+      </div>
     </div>
     <div class="clip-info">
       <div class="clip-info-text">
@@ -118,6 +121,31 @@
         <input type="color" class="bg-color-input" value="#ffffff">
       </label>
       <button type="button" class="bg-blur-btn" title="Fill the background with a blurred copy of the video">Blur</button>
+    </div>
+    <div class="caption-control">
+      <span class="control-label-sm">Caption</span>
+      <input type="text" class="caption-text-input" placeholder="Add a caption…" maxlength="120">
+      <div class="caption-style-row" hidden>
+        <select class="caption-font-select" title="Font">
+          <option value="montserrat">Montserrat</option>
+          <option value="playfair">Playfair Display</option>
+          <option value="pacifico">Pacifico</option>
+          <option value="caveat">Caveat</option>
+          <option value="bebasneue">Bebas Neue</option>
+        </select>
+        <label class="bg-custom-swatch caption-color-swatch" title="Text color">
+          <input type="color" class="caption-color-input" value="#000000">
+        </label>
+        <label class="bg-custom-swatch caption-bgcolor-swatch" title="Background color">
+          <input type="color" class="caption-bgcolor-input" value="#000000">
+        </label>
+        <input type="range" class="slider caption-bgopacity-slider" min="0" max="100" value="0" title="Background opacity">
+        <div class="caption-position-group">
+          <button type="button" class="bg-blur-btn caption-pos-btn" data-pos="top">Top</button>
+          <button type="button" class="bg-blur-btn caption-pos-btn" data-pos="middle">Middle</button>
+          <button type="button" class="bg-blur-btn caption-pos-btn active" data-pos="bottom">Bottom</button>
+        </div>
+      </div>
     </div>
     <div class="trim-control">
       <div class="trim-track">
@@ -157,6 +185,9 @@
         <img class="editor-bg-blur-img bg-blur-img" alt="">
         <div class="editor-crop-wrapper">
           <img class="editor-main-img" alt="">
+        </div>
+        <div class="caption-overlay editor-caption-overlay">
+          <span class="caption-pill"></span>
         </div>
       </div>
 
@@ -204,6 +235,32 @@
           <input type="color" class="bg-color-input" value="#ffffff">
         </label>
         <button type="button" class="bg-blur-btn" title="Fill the background with a blurred copy of the photo">Blur</button>
+      </div>
+
+      <div class="caption-control editor-caption-control">
+        <span class="control-label-sm">Caption</span>
+        <input type="text" class="caption-text-input" placeholder="Add a caption…" maxlength="120">
+        <div class="caption-style-row" hidden>
+          <select class="caption-font-select" title="Font">
+            <option value="montserrat">Montserrat</option>
+            <option value="playfair">Playfair Display</option>
+            <option value="pacifico">Pacifico</option>
+            <option value="caveat">Caveat</option>
+            <option value="bebasneue">Bebas Neue</option>
+          </select>
+          <label class="bg-custom-swatch caption-color-swatch" title="Text color">
+            <input type="color" class="caption-color-input" value="#000000">
+          </label>
+          <label class="bg-custom-swatch caption-bgcolor-swatch" title="Background color">
+            <input type="color" class="caption-bgcolor-input" value="#000000">
+          </label>
+          <input type="range" class="slider caption-bgopacity-slider" min="0" max="100" value="0" title="Background opacity">
+          <div class="caption-position-group">
+            <button type="button" class="bg-blur-btn caption-pos-btn" data-pos="top">Top</button>
+            <button type="button" class="bg-blur-btn caption-pos-btn" data-pos="middle">Middle</button>
+            <button type="button" class="bg-blur-btn caption-pos-btn active" data-pos="bottom">Bottom</button>
+          </div>
+        </div>
       </div>
 
       <div class="adjustments-control editor-adjustments-control">

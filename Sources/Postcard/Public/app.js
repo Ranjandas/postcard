@@ -17,12 +17,31 @@
   const MIN_CROP = 0.05;
   const clips = new Map(); // id -> clip state
 
+  // Custom (prefixed) @font-face family names — see styles.css — so a caption never picks up a
+  // system-installed font of the same common name instead of the exact bundled file the server
+  // renders with (matched by the same key server-side; see CaptionFonts in CaptionRenderer.swift).
+  const CAPTION_FONTS = {
+    montserrat: 'PostcardMontserrat',
+    playfair: 'PostcardPlayfair',
+    pacifico: 'PostcardPacifico',
+    caveat: 'PostcardCaveat',
+    bebasneue: 'PostcardBebasNeue',
+  };
+
   let currentAspect = readActiveAspectRatio();
   let activePlayingClip = null;
 
+  // Corner radius is sized off the preview *element* (video/img/crop-wrapper — the fitted media
+  // rect), while a caption is sized off the *canvas box* itself (`.canvas-preview`), so the same
+  // observer branches on which kind of target it's reporting on.
   const resizeObserver = new ResizeObserver(entries => {
     for (const entry of entries) {
-      applyRadiusToPreviewElement(entry.target);
+      if (entry.target.classList.contains('canvas-preview')) {
+        const pill = entry.target.querySelector('.caption-pill');
+        if (pill) applyCaptionSizeToPreviewElement(entry.target, pill);
+      } else {
+        applyRadiusToPreviewElement(entry.target);
+      }
     }
   });
 
@@ -79,6 +98,43 @@
     const shortSide = Math.min(w, h);
     const radius = (shortSide / 2) * (currentRadiusPercent() / 100);
     el.style.borderRadius = `${radius}px`;
+  }
+
+  // Mirrors the server's captionBandRect/fontSize math (% of the *canvas* short side, not the
+  // fitted media rect) — the per-clip size percent travels via a data attribute on the pill
+  // itself so this stays a plain (previewBox, pillEl) function, symmetric with
+  // applyRadiusToPreviewElement, rather than needing a clip lookup.
+  function applyCaptionSizeToPreviewElement(previewBox, pillEl) {
+    const w = previewBox.clientWidth;
+    const h = previewBox.clientHeight;
+    if (!w || !h) return;
+    const shortSide = Math.min(w, h);
+    const sizePercent = Number(pillEl.dataset.sizePercent) || 6;
+    pillEl.style.fontSize = `${(shortSide * sizePercent) / 100}px`;
+  }
+
+  function hexToRgba(hex, opacityPercent) {
+    const value = parseInt(hex.replace('#', ''), 16) || 0;
+    const r = (value >> 16) & 0xff;
+    const g = (value >> 8) & 0xff;
+    const b = value & 0xff;
+    return `rgba(${r}, ${g}, ${b}, ${clamp(opacityPercent, 0, 100) / 100})`;
+  }
+
+  // Full re-render of a caption pill from clip state — used by both the card's own caption
+  // controls and the editor's (which bind to currentEditingClip instead), same shape as
+  // renderEditorBackground vs setupBackgroundControls below.
+  function renderCaptionPreview(previewBox, overlayEl, pillEl, clip) {
+    pillEl.textContent = clip.caption;
+    pillEl.style.fontFamily = CAPTION_FONTS[clip.captionFont] || CAPTION_FONTS.montserrat;
+    pillEl.style.color = clip.captionColor;
+    pillEl.dataset.sizePercent = clip.captionSizePercent;
+    const hasBg = clip.captionBgOpacityPercent > 0;
+    pillEl.classList.toggle('has-bg', hasBg);
+    pillEl.style.backgroundColor = hasBg ? hexToRgba(clip.captionBgColor, clip.captionBgOpacityPercent) : '';
+    overlayEl.classList.remove('caption-pos-top', 'caption-pos-middle', 'caption-pos-bottom');
+    overlayEl.classList.add(`caption-pos-${clip.captionAnchor}`);
+    applyCaptionSizeToPreviewElement(previewBox, pillEl);
   }
 
   // Aspect ratio and padding are applied directly to the preview box via CSS
@@ -274,6 +330,64 @@
     });
   }
 
+  // Video-card-only (photo captions are edited in the big editor instead, matching how
+  // background works — see the .clip-card.is-photo CSS rule that hides this block on photo
+  // cards). Progressive disclosure: the styling row only appears once there's caption text.
+  function setupCaptionControls(cardEl, clip) {
+    const textInput = cardEl.querySelector('.caption-text-input');
+    const styleRow = cardEl.querySelector('.caption-style-row');
+    const fontSelect = cardEl.querySelector('.caption-font-select');
+    const colorInput = cardEl.querySelector('.caption-color-input');
+    const bgColorInput = cardEl.querySelector('.caption-bgcolor-input');
+    const bgOpacitySlider = cardEl.querySelector('.caption-bgopacity-slider');
+    const posButtons = Array.from(cardEl.querySelectorAll('.caption-pos-btn'));
+    const overlayEl = cardEl.querySelector('.caption-overlay');
+    const pillEl = cardEl.querySelector('.caption-pill');
+
+    function refresh() {
+      styleRow.hidden = clip.caption.length === 0;
+      renderCaptionPreview(clip.previewBox, overlayEl, pillEl, clip);
+    }
+
+    textInput.addEventListener('input', () => {
+      clip.caption = textInput.value;
+      refresh();
+    });
+
+    fontSelect.addEventListener('change', () => {
+      clip.captionFont = fontSelect.value;
+      refresh();
+    });
+
+    colorInput.addEventListener('input', () => {
+      clip.captionColor = colorInput.value;
+      refresh();
+    });
+
+    bgColorInput.addEventListener('input', () => {
+      clip.captionBgColor = bgColorInput.value;
+      refresh();
+    });
+
+    bgOpacitySlider.addEventListener('input', () => {
+      clip.captionBgOpacityPercent = Number(bgOpacitySlider.value);
+      updateSliderFill(bgOpacitySlider);
+      refresh();
+    });
+
+    posButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        posButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        clip.captionAnchor = btn.dataset.pos;
+        refresh();
+      });
+    });
+
+    updateSliderFill(bgOpacitySlider);
+    refresh();
+  }
+
   function initializeVideoClip(cardEl, data) {
     const video = cardEl.querySelector('video.main-video');
     const bgBlurVideo = cardEl.querySelector('video.bg-blur-video');
@@ -323,10 +437,18 @@
       duration,
       backgroundMode: 'color',
       backgroundColor: '#ffffff',
+      caption: '',
+      captionFont: 'montserrat',
+      captionSizePercent: 6,
+      captionColor: '#000000',
+      captionBgColor: '#000000',
+      captionBgOpacityPercent: 0,
+      captionAnchor: 'bottom',
     };
     clips.set(data.id, clip);
 
     setupBackgroundControls(cardEl, clip, data.suggestedColors);
+    setupCaptionControls(cardEl, clip);
 
     function updateRangeBar() {
       const start = parseFloat(startInput.value);
@@ -443,6 +565,7 @@
 
     video.addEventListener('loadedmetadata', () => applyRadiusToPreviewElement(video));
     resizeObserver.observe(video);
+    resizeObserver.observe(previewBox);
 
     exportBtn.addEventListener('click', () => exportClip(clip));
     deleteBtn.addEventListener('click', () => removeClip(clip));
@@ -486,11 +609,19 @@
       brightness: 0,
       contrast: 0,
       blackpoint: 0,
+      caption: '',
+      captionFont: 'montserrat',
+      captionSizePercent: 6,
+      captionColor: '#000000',
+      captionBgColor: '#000000',
+      captionBgOpacityPercent: 0,
+      captionAnchor: 'bottom',
     };
     clips.set(data.id, clip);
 
     img.addEventListener('load', () => applyRadiusToPreviewElement(img));
     resizeObserver.observe(img);
+    resizeObserver.observe(previewBox);
 
     exportBtn.addEventListener('click', () => exportClip(clip));
     deleteBtn.addEventListener('click', () => removeClip(clip));
@@ -542,6 +673,16 @@
   const editorBgCustomSwatch = photoEditor.querySelector('.editor-background-control .bg-custom-swatch');
   const editorBgColorInput = photoEditor.querySelector('.editor-background-control .bg-color-input');
   const editorBgBlurBtn = photoEditor.querySelector('.editor-background-control .bg-blur-btn');
+
+  const editorCaptionOverlay = photoEditor.querySelector('.editor-caption-overlay');
+  const editorCaptionPill = editorCaptionOverlay.querySelector('.caption-pill');
+  const editorCaptionTextInput = photoEditor.querySelector('.editor-caption-control .caption-text-input');
+  const editorCaptionStyleRow = photoEditor.querySelector('.editor-caption-control .caption-style-row');
+  const editorCaptionFontSelect = photoEditor.querySelector('.editor-caption-control .caption-font-select');
+  const editorCaptionColorInput = photoEditor.querySelector('.editor-caption-control .caption-color-input');
+  const editorCaptionBgColorInput = photoEditor.querySelector('.editor-caption-control .caption-bgcolor-input');
+  const editorCaptionBgOpacitySlider = photoEditor.querySelector('.editor-caption-control .caption-bgopacity-slider');
+  const editorCaptionPosButtons = Array.from(photoEditor.querySelectorAll('.editor-caption-control .caption-pos-btn'));
 
   const cropToolBtn = photoEditor.querySelector('.crop-tool-btn');
   const cropDoneBtn = photoEditor.querySelector('.crop-done-btn');
@@ -601,6 +742,7 @@
       clip.naturalWidth, clip.naturalHeight, clip.crop, paddingPercent
     );
     applyRadiusToPreviewElement(editorCropWrapper);
+    applyCaptionSizeToPreviewElement(editorCanvasPreview, editorCaptionPill);
   }
 
   // --- Background (shared shape with setupBackgroundControls, bound to currentEditingClip) ---
@@ -673,6 +815,71 @@
       editorBgColorInput.value = clip.backgroundColor;
       editorActiveElementForColor(clip.backgroundColor).classList.add('active');
     }
+  }
+
+  // --- Caption (editor side — mirrors setupCaptionControls above, bound to currentEditingClip
+  // instead of a fixed clip; also keeps the card's own thumbnail preview in sync on every change,
+  // the same way editorSelectBackgroundColor writes through to clip.previewBox). ---
+
+  function editorRefreshCaption() {
+    if (!currentEditingClip) return;
+    editorCaptionStyleRow.hidden = currentEditingClip.caption.length === 0;
+    renderCaptionPreview(editorCanvasPreview, editorCaptionOverlay, editorCaptionPill, currentEditingClip);
+    const cardOverlay = currentEditingClip.cardEl.querySelector('.caption-overlay');
+    const cardPill = currentEditingClip.cardEl.querySelector('.caption-pill');
+    renderCaptionPreview(currentEditingClip.previewBox, cardOverlay, cardPill, currentEditingClip);
+  }
+
+  editorCaptionTextInput.addEventListener('input', () => {
+    if (!currentEditingClip) return;
+    currentEditingClip.caption = editorCaptionTextInput.value;
+    editorRefreshCaption();
+  });
+
+  editorCaptionFontSelect.addEventListener('change', () => {
+    if (!currentEditingClip) return;
+    currentEditingClip.captionFont = editorCaptionFontSelect.value;
+    editorRefreshCaption();
+  });
+
+  editorCaptionColorInput.addEventListener('input', () => {
+    if (!currentEditingClip) return;
+    currentEditingClip.captionColor = editorCaptionColorInput.value;
+    editorRefreshCaption();
+  });
+
+  editorCaptionBgColorInput.addEventListener('input', () => {
+    if (!currentEditingClip) return;
+    currentEditingClip.captionBgColor = editorCaptionBgColorInput.value;
+    editorRefreshCaption();
+  });
+
+  editorCaptionBgOpacitySlider.addEventListener('input', () => {
+    if (!currentEditingClip) return;
+    currentEditingClip.captionBgOpacityPercent = Number(editorCaptionBgOpacitySlider.value);
+    updateSliderFill(editorCaptionBgOpacitySlider);
+    editorRefreshCaption();
+  });
+
+  editorCaptionPosButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!currentEditingClip) return;
+      editorCaptionPosButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentEditingClip.captionAnchor = btn.dataset.pos;
+      editorRefreshCaption();
+    });
+  });
+
+  function renderEditorCaption(clip) {
+    editorCaptionTextInput.value = clip.caption;
+    editorCaptionFontSelect.value = clip.captionFont;
+    editorCaptionColorInput.value = clip.captionColor;
+    editorCaptionBgColorInput.value = clip.captionBgColor;
+    editorCaptionBgOpacitySlider.value = clip.captionBgOpacityPercent;
+    updateSliderFill(editorCaptionBgOpacitySlider);
+    editorCaptionPosButtons.forEach(b => b.classList.toggle('active', b.dataset.pos === clip.captionAnchor));
+    editorRefreshCaption();
   }
 
   // --- Tonal adjustment sliders + live tone-curve preview ---------------------------------
@@ -856,6 +1063,7 @@
     editorStatusText.classList.remove('error', 'success');
     exitCropTool();
     renderEditorBackground(clip);
+    renderEditorCaption(clip);
     renderEditorSliders(clip);
     updateToneCurve(clip);
     applyEditorCanvasControls(clip);
@@ -915,6 +1123,13 @@
           brightnessPercent: clip.brightness || 0,
           contrastPercent: clip.contrast || 0,
           blackPercent: clip.blackpoint || 0,
+          captionText: clip.caption || '',
+          captionFontKey: clip.captionFont || 'montserrat',
+          captionSizePercent: clip.captionSizePercent || 6,
+          captionColorHex: clip.captionColor || '#000000',
+          captionBgColorHex: clip.captionBgColor || '#000000',
+          captionBgOpacityPercent: clip.captionBgOpacityPercent || 0,
+          captionAnchor: clip.captionAnchor || 'bottom',
         }),
       });
       if (!res.ok) throw new Error(`export failed (${res.status})`);
@@ -940,6 +1155,7 @@
     if (currentEditingClip === clip) closeEditor();
     if (clip.video) clip.video.pause();
     resizeObserver.unobserve(clip.previewEl);
+    resizeObserver.unobserve(clip.previewBox);
     clips.delete(clip.id);
     clip.cardEl.remove();
     if (clips.size === 0) globalControls.hidden = true;

@@ -21,6 +21,9 @@ final class BlurredBackgroundInstruction: NSObject, AVVideoCompositionInstructio
     let fittedVideoRect: CGRect
     let cornerRadius: CGFloat
     let canvasSize: CGSize
+    // Rasterized once (the caption is static across frames), then composited into every frame —
+    // see `VideoProcessor.export`'s `.blur` branch.
+    let captionOverlay: CIImage?
 
     init(
         timeRange: CMTimeRange,
@@ -29,7 +32,8 @@ final class BlurredBackgroundInstruction: NSObject, AVVideoCompositionInstructio
         backgroundTransform: CGAffineTransform,
         fittedVideoRect: CGRect,
         cornerRadius: CGFloat,
-        canvasSize: CGSize
+        canvasSize: CGSize,
+        captionOverlay: CIImage?
     ) {
         self.timeRange = timeRange
         self.sourceTrackID = sourceTrackID
@@ -39,6 +43,7 @@ final class BlurredBackgroundInstruction: NSObject, AVVideoCompositionInstructio
         self.fittedVideoRect = fittedVideoRect
         self.cornerRadius = cornerRadius
         self.canvasSize = canvasSize
+        self.captionOverlay = captionOverlay
     }
 }
 
@@ -115,7 +120,12 @@ final class BlurredBackgroundCompositor: NSObject, AVVideoCompositing {
             composed = foreground.composited(over: background)
         }
 
-        ciContext.render(composed, to: outputBuffer, bounds: canvasRect, colorSpace: CGColorSpaceCreateDeviceRGB())
+        var final = composed
+        if let overlay = instruction.captionOverlay {
+            final = overlay.composited(over: composed)
+        }
+
+        ciContext.render(final, to: outputBuffer, bounds: canvasRect, colorSpace: CGColorSpaceCreateDeviceRGB())
         request.finish(withComposedVideoFrame: outputBuffer)
     }
 }

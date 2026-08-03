@@ -16,6 +16,7 @@ struct ExportParameters: Sendable {
     let canvasSize: CGSize // e.g. 1080x1350
     let horizontalPaddingPercent: Double // 0...100, of canvas width, applied equally left/right
     let background: BackgroundMode
+    let caption: CaptionParameters?
 }
 
 enum VideoProcessorError: Error {
@@ -202,6 +203,11 @@ enum VideoProcessor {
                 videoLayer.mask = maskLayer
             }
 
+            if let caption = params.caption,
+               let captionLayer = CaptionRenderer.makeCaptionLayer(caption, canvasSize: params.canvasSize) {
+                parentLayer.addSublayer(captionLayer)
+            }
+
             videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
                 postProcessingAsVideoLayer: videoLayer, in: parentLayer
             )
@@ -221,6 +227,12 @@ enum VideoProcessor {
                 ))
                 .concatenating(CGAffineTransform(translationX: coverRect.origin.x, y: coverRect.origin.y))
 
+            // The caption is static (doesn't change per frame), so it's rasterized once here
+            // rather than laid out inside the per-frame compositor.
+            let captionOverlay = params.caption.flatMap {
+                CaptionRenderer.rasterize($0, canvasSize: params.canvasSize)
+            }
+
             let blurInstruction = BlurredBackgroundInstruction(
                 timeRange: CMTimeRange(start: .zero, duration: compVideoTrack.timeRange.duration),
                 sourceTrackID: compVideoTrack.trackID,
@@ -228,7 +240,8 @@ enum VideoProcessor {
                 backgroundTransform: backgroundTransform,
                 fittedVideoRect: fittedVideoRect,
                 cornerRadius: radius,
-                canvasSize: params.canvasSize
+                canvasSize: params.canvasSize,
+                captionOverlay: captionOverlay
             )
             videoComposition.instructions = [blurInstruction]
             videoComposition.customVideoCompositorClass = BlurredBackgroundCompositor.self
