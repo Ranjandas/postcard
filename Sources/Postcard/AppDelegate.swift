@@ -54,14 +54,19 @@ import Foundation
         }
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        guard let app = vaporApp else { return }
-        let sem = DispatchSemaphore(value: 0)
+    // Deliberately not `applicationWillTerminate` + a blocking DispatchSemaphore: this class is
+    // @MainActor, so `Task { ... }` created here inherits that actor and can only run on the main
+    // thread's own serial executor — blocking that same thread with `sem.wait()` right after
+    // starting it deadlocks forever (the task can never get scheduled to call `sem.signal()`).
+    // `.terminateLater` + `NSApp.reply(...)` lets AppKit's run loop keep going while the async
+    // shutdown completes, then finishes termination once it actually has.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let app = vaporApp else { return .terminateNow }
         Task {
             try? await app.asyncShutdown()
-            sem.signal()
+            NSApp.reply(toApplicationShouldTerminate: true)
         }
-        sem.wait()
+        return .terminateLater
     }
 
     /// Accessory apps (no Dock icon) never get a visible menu bar, so without this,
@@ -81,11 +86,16 @@ import Foundation
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "photo.on.rectangle.angled", accessibilityDescription: "Postcard")
         let menu = NSMenu()
-        menu.addItem(withTitle: "Open Postcard", action: #selector(openUI), keyEquivalent: "")
-        menu.addItem(withTitle: "Reveal Output Folder", action: #selector(revealOutput), keyEquivalent: "")
+        let openItem = menu.addItem(withTitle: "Open Postcard", action: #selector(openUI), keyEquivalent: "")
+        openItem.target = self
+        let revealItem = menu.addItem(withTitle: "Reveal Output Folder", action: #selector(revealOutput), keyEquivalent: "")
+        revealItem.target = self
         menu.addItem(.separator())
+        // Left with a nil target deliberately: `terminate(_:)` is an NSApplication method, not one
+        // AppDelegate implements, so setting `target = self` here (as the other items do) makes
+        // NSMenu's automatic validation see the target doesn't respond to the selector and grey the
+        // item out. A nil target instead walks the responder chain, which finds NSApp.
         menu.addItem(withTitle: "Quit Postcard", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        menu.items.forEach { $0.target = self }
         item.menu = menu
         statusItem = item
     }
