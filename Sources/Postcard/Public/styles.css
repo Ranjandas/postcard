@@ -144,7 +144,26 @@ main {
 
 /* --- Drop zone ------------------------------------------------------------ */
 
+/* Kept in the render tree (not `display: none`/[hidden]) rather than just visually hidden via
+   `hidden` — WKWebView's runOpenPanelWith (see MainWindow.swift) appears to require the <input
+   type="file"> to actually be rendered to route activation to it at all, `hidden` or not. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 #drop-zone {
+  /* It's a <label for="file-input">, not a <section>, so its native click-to-activate reaches
+     WKWebView's runOpenPanelWith (see MainWindow.swift) — a synthetic JS `.click()` on the input
+     doesn't. `display: block` restores the block-level layout a <label> doesn't have by default. */
+  display: block;
   border: 1.5px dashed var(--card-border);
   border-radius: var(--radius-lg);
   padding: 3rem 1rem;

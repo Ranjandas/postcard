@@ -275,7 +275,13 @@
       .filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'));
     handleFiles(files);
   });
-  dropZone.addEventListener('click', () => fileInput.click());
+  // No click listener needed here: dropZone is a <label for="file-input">, so the browser's own
+  // default action opens the picker on click. A JS `fileInput.click()` call (the old approach,
+  // before dropZone became a <label>) works in a real browser but is silently ignored by
+  // WKWebView's runOpenPanelWith, which only responds to a genuine, non-synthetic activation —
+  // see MainWindow.swift. The keydown fallback below still uses `.click()` since there's no
+  // native label keyboard-activation equivalent; it's a known gap for keyboard-only use inside
+  // the native app window specifically (unaffected when this page runs in a real browser).
   dropZone.addEventListener('keydown', e => {
     if (e.key === 'Enter' || e.key === ' ') fileInput.click();
   });

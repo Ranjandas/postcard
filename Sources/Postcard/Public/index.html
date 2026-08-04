@@ -25,7 +25,7 @@
 
 <main>
 
-<section id="drop-zone" tabindex="0">
+<label id="drop-zone" for="file-input" tabindex="0">
   <div class="drop-icon" aria-hidden="true">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 16V4"></path>
@@ -35,8 +35,8 @@
   </div>
   <p class="drop-title">Drag &amp; drop video clips or photos here</p>
   <p class="drop-hint">or click to choose files</p>
-  <input type="file" id="file-input" accept="video/*,image/*" multiple hidden>
-</section>
+  <input type="file" id="file-input" class="visually-hidden" accept="video/*,image/*" multiple>
+</label>
 
 <section id="global-controls" hidden>
   <div class="control-group">
