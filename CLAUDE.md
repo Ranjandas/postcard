@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Postcard is a macOS menu bar app. It runs a local Vapor web server in-process and serves a
-browser UI at `http://127.0.0.1:8420`. You drag short video clips or photos onto the page.
+Postcard is a macOS menu bar app. It runs a local Vapor web server in-process and displays its UI
+in a native window (a `WKWebView` pointed at `http://127.0.0.1:8420`, not the system browser —
+see `MainWindow.swift`). You drag short video clips or photos onto the page.
 Video clips get trimmed; photos get cropped and tonally adjusted (exposure, highlights, shadows,
 brightness, contrast, black point) in a large Lightroom/Photomator-style editor. Both share the
 same "postcard" framing controls — aspect ratio, corner roundedness, padding, background (white/
@@ -25,8 +26,8 @@ development).
 ## Commands
 
 - `swift build` — compile check.
-- `swift run` — launch the menu bar app for development (status item, no Dock icon, auto-opens
-  the browser to `http://127.0.0.1:8420/`).
+- `swift run` — launch the menu bar app for development (status item, no Dock icon, opens its own
+  native window at `http://127.0.0.1:8420/`).
 - `./Scripts/build-app.sh` — release build, then hand-assembles `Postcard.app` (no `xcodebuild`
   available to do this). Copies the binary, `Resources/Info.plist`, and every SwiftPM-generated
   `*.bundle` (the app's own `Public/` assets plus dependency privacy-manifest bundles) into
@@ -40,7 +41,19 @@ development).
   resolve a promise nothing awaits (since we call `app.startup()`, not `app.execute()`), so the
   default terminate-on-SIGTERM behavior is disabled. Use `kill -KILL <pid>` instead, or quit via
   the app's own menu bar item (which goes through `NSApplication.terminate`, a different, working
-  path).
+  path). For a `swift run` dev binary specifically, match on the real path — it's
+  `.build/arm64-apple-macosx/debug/Postcard`, not `.build/debug/Postcard` (that pattern silently
+  matches nothing, the same symlink trap as `./Scripts/build-app.sh` below, and leaves the old
+  process holding port 8420 so the new one fails to bind).
+
+## Dev log
+
+After implementing any feature or bugfix, append an entry to `DEVLOG.md` (repo root) — What/Why/
+How, a few sentences each, dated, newest entry on top — without waiting to be asked. Do this every
+time, not just when it's requested. `DEVLOG.md` is a chronological record of *why* changes
+happened and what was learned making them; this file (`CLAUDE.md`) stays a living snapshot of
+current architecture and gets rewritten as things change, so the two don't overlap — architecture
+facts belong here, the history of how they came to be belongs there.
 
 ## Architecture
 

@@ -5,6 +5,7 @@ import Foundation
 @objc @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var vaporApp: Application?
+    private var mainWindow: MainWindowController?
     private let port = 8420
     private let hostname = "127.0.0.1"
 
@@ -41,7 +42,10 @@ import Foundation
 
         let url = URL(string: "http://\(hostname):\(port)/")!
         await waitUntilReady(url: url)
-        NSWorkspace.shared.open(url)
+        let window = MainWindowController()
+        window.load(url: url)
+        window.show()
+        mainWindow = window
     }
 
     /// Belt-and-suspenders readiness check: poll briefly before opening the browser,
@@ -103,7 +107,16 @@ import Foundation
     }
 
     @objc private func openUI() {
-        NSWorkspace.shared.open(URL(string: "http://\(hostname):\(port)/")!)
+        if let mainWindow {
+            mainWindow.show()
+            return
+        }
+        // Defensive fallback: shouldn't happen in practice, since the window is created once the
+        // server finishes starting up, before the status item's menu can be interacted with.
+        let window = MainWindowController()
+        window.load(url: URL(string: "http://\(hostname):\(port)/")!)
+        window.show()
+        mainWindow = window
     }
 
     @objc private func revealOutput() {
